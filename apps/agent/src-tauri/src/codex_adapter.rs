@@ -28,9 +28,42 @@ pub struct CodexAdapter {
     command: String
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct CodexExecOptions {
+    pub sandbox: Option<String>,
+    pub model: Option<String>
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodexExecCommand {
+    pub program: String,
+    pub args: Vec<String>
+}
+
 impl CodexAdapter {
     pub fn new(command: impl Into<String>) -> Self {
         Self { command: command.into() }
+    }
+
+    pub fn build_exec_command(&self, working_dir: PathBuf, options: CodexExecOptions) -> CodexExecCommand {
+        let mut args = vec![
+            "exec".to_string(),
+            "--cd".to_string(),
+            working_dir.to_string_lossy().replace('\\', "/")
+        ];
+        if let Some(sandbox) = options.sandbox {
+            args.push("--sandbox".to_string());
+            args.push(sandbox);
+        }
+        if let Some(model) = options.model {
+            args.push("--model".to_string());
+            args.push(model);
+        }
+        args.push("-".to_string());
+        CodexExecCommand {
+            program: self.command.clone(),
+            args
+        }
     }
 
     pub async fn start(
@@ -38,9 +71,10 @@ impl CodexAdapter {
         working_dir: PathBuf,
         output_tx: mpsc::Sender<ProcessOutput>
     ) -> Result<CodexSessionProcess> {
-        let mut child = Command::new(&self.command)
+        let exec = self.build_exec_command(working_dir.clone(), CodexExecOptions::default());
+        let mut child = Command::new(exec.program)
+            .args(exec.args)
             .current_dir(working_dir)
-            .arg("--help")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
