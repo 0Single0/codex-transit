@@ -52,3 +52,71 @@ h1 {
   border-radius: 8px;
   padding: 16px;
 }
+
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: #33434c;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #c9d4da;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: white;
+}
+
+button {
+  min-height: 40px;
+  border: 1px solid #1f6feb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: white;
+  background: #1f6feb;
+}
+
+.list-row,
+.file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  color: #172026;
+  background: white;
+  border-color: #d9e1e5;
+}
+
+.status {
+  color: #8a4b00;
+}
+
+.status.online {
+  color: #18794e;
+}
+
+.console-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.console {
+  min-height: 320px;
+  margin: 0;
+  overflow: auto;
+  border-radius: 8px;
+  padding: 12px;
+  color: #d7e2ea;
+  background: #11181c;
+}
+
+.error {
+  margin: 0;
+  color: #b42318;
+}
