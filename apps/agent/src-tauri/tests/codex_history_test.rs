@@ -66,6 +66,34 @@ fn filters_codex_history_by_project_root_from_session_meta() {
 }
 
 #[test]
+fn matches_codex_history_when_project_root_uses_windows_verbatim_prefix() {
+    let root = unique_temp_dir();
+    fs::create_dir_all(root.join("sessions/2026/06/01")).unwrap();
+    fs::write(
+        root.join("session_index.jsonl"),
+        r#"{"id":"project-match","thread_name":"Match","updated_at":"2026-06-01T09:00:00.000Z"}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("sessions/2026/06/01/rollout-project-match.jsonl"),
+        r#"{"timestamp":"2026-06-01T09:00:00.000Z","type":"session_meta","payload":{"id":"project-match","cwd":"E:\\code\\codex-transit"}}"#,
+    )
+    .unwrap();
+
+    let sessions = list_codex_history_from_home(
+        &root,
+        CodexHistoryListOptions {
+            limit: 10,
+            project_root: Some(PathBuf::from(r"\\?\E:\code\codex-transit")),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].codex_session_id, "project-match");
+}
+
+#[test]
 fn loads_codex_history_messages_from_session_rollout_file() {
     let root = unique_temp_dir();
     let session_dir = root.join("sessions/2026/06/01");

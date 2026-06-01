@@ -204,8 +204,17 @@ fn read_session_cwd(path: &Path) -> Result<Option<PathBuf>> {
 }
 
 fn normalize_path(path: &Path) -> String {
+    normalize_path_string(&path.to_string_lossy())
+}
+
+fn normalize_path_string(path: &str) -> String {
+    let path = path
+        .replace('\\', "/")
+        .trim_start_matches("//?/")
+        .trim_start_matches("//./")
+        .to_string();
     let mut parts = Vec::new();
-    for component in path.components() {
+    for component in Path::new(&path).components() {
         match component {
             Component::Prefix(prefix) => {
                 parts.push(prefix.as_os_str().to_string_lossy().to_string())
@@ -217,5 +226,5 @@ fn normalize_path(path: &Path) -> String {
             Component::Normal(value) => parts.push(value.to_string_lossy().to_string()),
         }
     }
-    parts.join("/").replace('\\', "/").to_lowercase()
+    parts.join("/").to_lowercase()
 }
