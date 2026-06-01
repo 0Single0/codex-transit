@@ -36,3 +36,28 @@ fn serializes_file_change_with_camel_case_fields() {
     assert!(serialized.contains("relativePath"));
     assert!(serialized.contains("changeType"));
 }
+
+#[test]
+fn omits_null_optional_fields_from_codex_history_results() {
+    let event = RealtimeEvent::CodexHistoryResult {
+        event_id: "00000000-0000-4000-8000-000000000001".parse().unwrap(),
+        request_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
+        timestamp: "2026-06-01T00:00:00.000Z".to_string(),
+        user_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
+        device_id: "00000000-0000-4000-8000-000000000004".parse().unwrap(),
+        ok: true,
+        sessions: vec![codex_transit_agent::protocol::CodexHistoryItem {
+            codex_session_id: "019e8268-8f45-7422-aff8-5524d4c6990b".to_string(),
+            title: "history".to_string(),
+            updated_at: "2026-06-01T08:59:41.4407978Z".to_string(),
+            preview: None,
+        }],
+        error: None,
+    };
+
+    let serialized = serde_json::to_string(&event).unwrap();
+
+    assert!(!serialized.contains(":null"));
+    assert!(!serialized.contains("preview"));
+    assert!(!serialized.contains("error"));
+}

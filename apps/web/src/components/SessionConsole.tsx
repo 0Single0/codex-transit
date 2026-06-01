@@ -39,7 +39,7 @@ export function SessionConsole(props: {
       setMessages(nextMessages);
     });
 
-    const closeStream = connectSessionStream({
+    const stream = connectSessionStream({
       token: props.token,
       sessionId: props.sessionId,
       onEvent(event: RealtimeEvent) {
@@ -50,7 +50,7 @@ export function SessionConsole(props: {
     });
     return () => {
       mounted = false;
-      closeStream();
+      stream.close();
     };
   }, [props.token, props.sessionId]);
 

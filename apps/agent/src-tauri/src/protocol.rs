@@ -12,6 +12,7 @@ pub enum RealtimeEvent {
         device_id: Uuid,
         project_id: Uuid,
         session_id: Uuid,
+        #[serde(skip_serializing_if = "Option::is_none")]
         codex_session_id: Option<String>
     },
     #[serde(rename = "session.input", rename_all = "camelCase")]
@@ -22,6 +23,7 @@ pub enum RealtimeEvent {
         device_id: Uuid,
         project_id: Uuid,
         session_id: Uuid,
+        #[serde(skip_serializing_if = "Option::is_none")]
         codex_session_id: Option<String>,
         text: String
     },
@@ -33,6 +35,7 @@ pub enum RealtimeEvent {
         device_id: Uuid,
         project_id: Uuid,
         session_id: Uuid,
+        #[serde(skip_serializing_if = "Option::is_none")]
         codex_session_id: Option<String>
     },
     #[serde(rename = "codex.history.request", rename_all = "camelCase")]
@@ -42,6 +45,7 @@ pub enum RealtimeEvent {
         timestamp: String,
         user_id: Uuid,
         device_id: Uuid,
+        #[serde(skip_serializing_if = "Option::is_none")]
         project_id: Option<Uuid>,
         limit: u32
     },
@@ -63,6 +67,7 @@ pub enum RealtimeEvent {
         device_id: Uuid,
         ok: bool,
         sessions: Vec<CodexHistoryItem>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>
     },
     #[serde(rename = "codex.history.detail.result", rename_all = "camelCase")]
@@ -75,6 +80,7 @@ pub enum RealtimeEvent {
         codex_session_id: String,
         ok: bool,
         messages: Vec<CodexHistoryMessage>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>
     },
     #[serde(rename = "diff.request", rename_all = "camelCase")]
@@ -109,6 +115,7 @@ pub enum RealtimeEvent {
         project_id: Uuid,
         session_id: Uuid,
         relative_path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         old_relative_path: Option<String>,
         change_type: String
     },
@@ -123,7 +130,9 @@ pub enum RealtimeEvent {
         session_id: Uuid,
         relative_path: String,
         ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
         diff: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>
     }
 }
@@ -134,6 +143,7 @@ pub struct CodexHistoryItem {
     pub codex_session_id: String,
     pub title: String,
     pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
 }
 
@@ -143,5 +153,6 @@ pub struct CodexHistoryMessage {
     pub id: String,
     pub role: String,
     pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
 }

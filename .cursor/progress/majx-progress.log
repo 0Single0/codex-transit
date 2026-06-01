@@ -491,3 +491,20 @@
   - apps/agent/src-tauri/src/session_manager.rs、codex_adapter.rs：处理历史请求并支持 codex exec resume
   - apps/web/src/App.tsx、api/client.ts、api/realtime.ts、components/SessionConsole.tsx：历史列表/详情展示与继续对话
   - apps/**/test、packages/shared/src/events.test.ts：补充协议、API、Agent 历史解析与 resume 回归测试
+
+[2026-06-01]
+用户输入：为什么还是有以前的问题？不是让你依据 codex cli 数据了吗。历史对话列表获取失败获取不到，排查到底能不能获取到。
+完成：修复 Codex CLI 历史同步链路 (majx)
+  - 确认本机 Codex session_index.jsonl 可读取，当前有 355 条历史且可定位 rollout 文件
+  - 修复 Agent 实时事件 Option 字段序列化为 null 导致 server/shared schema 拒收的问题
+  - 修复手机端历史请求 websocket viewer 注册竞态，等待 connected 后再请求历史
+  - 避免进入项目时自动打开旧数据库 transit session，减少旧“你好”消息混入
+
+涉及文件：
+  - apps/agent/src-tauri/src/protocol.rs：Option 字段跳过 None 序列化
+  - apps/agent/src-tauri/tests/protocol_test.rs：补充 history result 不发送 null 的回归测试
+  - apps/web/src/api/realtime.ts：实时连接返回 ready/close，等待 server connected ack
+  - apps/web/src/App.tsx：历史请求等待 device stream ready；项目进入不复用旧会话
+  - apps/web/src/projectSessionSelection.ts：新增项目会话打开策略 helper
+  - apps/web/src/api/realtime.test.ts：补充 websocket ready 回归测试
+  - .gitignore：忽略临时 Cargo target 目录

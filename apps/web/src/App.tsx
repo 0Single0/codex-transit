@@ -8,6 +8,7 @@ import { LoginView } from "./components/LoginView";
 import { ProjectListView } from "./components/ProjectListView";
 import { SessionConsole } from "./components/SessionConsole";
 import { Locale, messages } from "./i18n";
+import { shouldAutoOpenStoredSession } from "./projectSessionSelection";
 import { openSessionNavigation } from "./sessionNavigation";
 
 type Tab = "devices" | "me";
@@ -118,7 +119,7 @@ export function App() {
     const projectSessions = await runAuthorized(() => api.sessions(project.projectId));
     if (!projectSessions) return;
     setSessions(projectSessions);
-    if (projectSessions[0]) {
+    if (shouldAutoOpenStoredSession(projectSessions) && projectSessions[0]) {
       openSession(projectSessions[0]);
       return;
     }
@@ -138,7 +139,7 @@ export function App() {
     setHistoryOpen(true);
     setHistoryLoading(true);
     setError(null);
-    const closeStream = connectDeviceStream({
+    const stream = connectDeviceStream({
       token,
       deviceId: selectedDevice.id,
       onEvent(event: RealtimeEvent) {
@@ -149,19 +150,20 @@ export function App() {
         } else {
           setError(event.error ?? labels.historyLoadFailed);
         }
-        closeStream();
+        stream.close();
       }
     });
+    await stream.ready;
     const request = await runAuthorized(() => api.requestCodexHistory(selectedDevice.id, selectedProject.projectId, 50));
     if (!request) {
-      closeStream();
+      stream.close();
       setHistoryLoading(false);
       return;
     }
     window.setTimeout(() => {
       setHistoryLoading((current) => {
         if (current) {
-          closeStream();
+          stream.close();
           setError(labels.historyLoadFailed);
         }
         return false;
@@ -173,13 +175,13 @@ export function App() {
     if (!token || !selectedDevice || !selectedProject) return;
     setHistoryLoading(true);
     setError(null);
-    const closeStream = connectDeviceStream({
+    const stream = connectDeviceStream({
       token,
       deviceId: selectedDevice.id,
       onEvent(event: RealtimeEvent) {
         if (event.type !== "codex.history.detail.result" || event.codexSessionId !== item.codexSessionId) return;
         setHistoryLoading(false);
-        closeStream();
+        stream.close();
         if (!event.ok) {
           setError(event.error ?? labels.historyLoadFailed);
           return;
@@ -189,9 +191,10 @@ export function App() {
         void openOrCreateTransitSessionForHistory(item);
       }
     });
+    await stream.ready;
     const request = await runAuthorized(() => api.requestCodexHistoryDetail(selectedDevice.id, item.codexSessionId));
     if (!request) {
-      closeStream();
+      stream.close();
       setHistoryLoading(false);
     }
   }
