@@ -11,7 +11,10 @@ pub mod protocol;
 pub mod server_client;
 pub mod session_manager;
 
-use commands::{add_project, get_agent_settings, list_projects, save_agent_settings, AgentState};
+use commands::{
+    add_project, get_agent_settings, list_projects, save_agent_settings, sync_projects_now,
+    AgentState,
+};
 
 pub fn run() {
     tauri::Builder::default()
@@ -20,7 +23,8 @@ pub fn run() {
             add_project,
             list_projects,
             save_agent_settings,
-            get_agent_settings
+            get_agent_settings,
+            sync_projects_now
         ])
         .plugin(tauri_plugin_shell::init())
         .run(tauri::generate_context!())

@@ -20,6 +20,8 @@ pub struct ProjectSyncRequest {
     pub body: String,
 }
 
+pub struct ProjectSyncHttpClient;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectSyncBody {
@@ -68,4 +70,26 @@ pub fn sync_projects_from_registry(
         &settings.device_token,
         sync_projects,
     )
+}
+
+impl ProjectSyncHttpClient {
+    pub fn headers(request: &ProjectSyncRequest) -> Vec<(String, String)> {
+        vec![
+            ("content-type".to_string(), "application/json".to_string()),
+            ("x-device-token".to_string(), request.device_token.clone()),
+        ]
+    }
+
+    pub async fn send(request: ProjectSyncRequest) -> Result<()> {
+        let client = reqwest::Client::new();
+        let response = client
+            .post(request.url)
+            .header("content-type", "application/json")
+            .header("x-device-token", request.device_token)
+            .body(request.body)
+            .send()
+            .await?;
+        response.error_for_status()?;
+        Ok(())
+    }
 }

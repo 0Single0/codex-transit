@@ -5,7 +5,7 @@ use tauri::State;
 use crate::{
     agent_config::{AgentConfig, AgentSettings},
     project_registry::{ProjectEntry, ProjectRegistry},
-    project_sync::{sync_projects_from_registry, ProjectSyncRequest},
+    project_sync::{sync_projects_from_registry, ProjectSyncHttpClient, ProjectSyncRequest},
 };
 
 pub struct AgentState {
@@ -86,4 +86,12 @@ pub fn build_project_sync_request_from_state(
         .map_err(|_| "project registry locked".to_string())?
         .list();
     sync_projects_from_registry(&settings, projects).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn sync_projects_now(state: State<'_, AgentState>) -> Result<(), String> {
+    let request = build_project_sync_request_from_state(&state)?;
+    ProjectSyncHttpClient::send(request)
+        .await
+        .map_err(|error| error.to_string())
 }

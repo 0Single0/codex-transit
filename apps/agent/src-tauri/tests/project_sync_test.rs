@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use codex_transit_agent::{
     agent_config::AgentSettings,
     project_registry::ProjectEntry,
-    project_sync::{build_project_sync_request, sync_projects_from_registry, SyncProject},
+    project_sync::{
+        build_project_sync_request, sync_projects_from_registry, ProjectSyncHttpClient, SyncProject,
+    },
 };
 
 #[test]
@@ -58,4 +60,23 @@ fn maps_local_projects_to_sync_request_from_saved_settings() {
         .body
         .contains("\"agentKey\":\"00000000-0000-4000-8000-000000000004\""));
     assert!(request.body.contains("\"displayName\":\"codex-transit\""));
+}
+
+#[test]
+fn exposes_request_headers_for_project_sync_http_client() {
+    let request = build_project_sync_request(
+        "http://localhost:4000",
+        "00000000-0000-4000-8000-000000000003",
+        "device-token",
+        vec![],
+    )
+    .unwrap();
+
+    assert_eq!(
+        ProjectSyncHttpClient::headers(&request),
+        vec![
+            ("content-type".to_string(), "application/json".to_string()),
+            ("x-device-token".to_string(), "device-token".to_string())
+        ]
+    );
 }
