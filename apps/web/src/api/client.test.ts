@@ -55,4 +55,38 @@ describe("ApiClient", () => {
       }
     });
   });
+
+  it("loads session output history", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ seq: 0, stream: "stdout", text: "hello" }])
+    });
+    const api = new ApiClient("token", fetchMock as never);
+
+    await api.sessionOutput("session-1");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/sessions/session-1/output", {
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
+
+  it("loads changed file history", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ relativePath: "src/main.ts", changeType: "modified" }])
+    });
+    const api = new ApiClient("token", fetchMock as never);
+
+    await api.sessionFileChanges("session-1");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/sessions/session-1/file-changes", {
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
 });

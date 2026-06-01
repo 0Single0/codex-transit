@@ -48,6 +48,24 @@ export const deviceProjectsResponseSchema = z.object({
   projects: z.array(projectSummarySchema)
 });
 
+export const terminalOutputChunkSchema = z.object({
+  id: uuidSchema.optional(),
+  sessionId: uuidSchema.optional(),
+  seq: z.number().int().nonnegative(),
+  stream: z.enum(["stdout", "stderr"]),
+  text: z.string(),
+  createdAt: z.string().datetime().optional()
+});
+
+export const fileChangeHistorySchema = z.object({
+  id: uuidSchema.optional(),
+  sessionId: uuidSchema.optional(),
+  relativePath: z.string().min(1),
+  oldRelativePath: z.string().min(1).nullable().optional(),
+  changeType: z.enum(["created", "modified", "deleted", "renamed"]),
+  createdAt: z.string().datetime().optional()
+});
+
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type DeviceSummary = z.infer<typeof deviceSummarySchema>;
@@ -55,3 +73,5 @@ export type CreateBindCodeResponse = z.infer<typeof createBindCodeResponseSchema
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type DeviceProjectsResponse = z.infer<typeof deviceProjectsResponseSchema>;
+export type TerminalOutputChunk = z.infer<typeof terminalOutputChunkSchema>;
+export type FileChangeHistory = z.infer<typeof fileChangeHistorySchema>;

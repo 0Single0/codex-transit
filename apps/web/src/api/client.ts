@@ -2,8 +2,10 @@ import type {
   CreateBindCodeResponse,
   DeviceProjectsResponse,
   DeviceSummary,
+  FileChangeHistory,
   LoginResponse,
-  SessionSummary
+  SessionSummary,
+  TerminalOutputChunk
 } from "@codex-transit/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
@@ -31,6 +33,14 @@ export class ApiClient {
 
   async sessions(projectId: string): Promise<SessionSummary[]> {
     return this.request(`/projects/${projectId}/sessions`);
+  }
+
+  async sessionOutput(sessionId: string): Promise<TerminalOutputChunk[]> {
+    return this.request(`/sessions/${sessionId}/output`);
+  }
+
+  async sessionFileChanges(sessionId: string): Promise<FileChangeHistory[]> {
+    return this.request(`/sessions/${sessionId}/file-changes`);
   }
 
   async deviceProjects(deviceId: string): Promise<DeviceProjectsResponse> {

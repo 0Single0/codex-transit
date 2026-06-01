@@ -1,10 +1,12 @@
-import type { RealtimeEvent } from "@codex-transit/shared";
+import type { FileChangeHistory, RealtimeEvent, TerminalOutputChunk } from "@codex-transit/shared";
 import { useEffect, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
 
 export function SessionConsole(props: {
   token: string;
   sessionId: string;
+  loadOutput: () => Promise<TerminalOutputChunk[]>;
+  loadFileChanges: () => Promise<FileChangeHistory[]>;
   onSend: (text: string) => Promise<void>;
   onStart: () => Promise<void>;
   onStop: () => Promise<void>;
@@ -15,7 +17,14 @@ export function SessionConsole(props: {
   const [prompt, setPrompt] = useState("");
 
   useEffect(() => {
-    return connectSessionStream({
+    let mounted = true;
+    void Promise.all([props.loadOutput(), props.loadFileChanges()]).then(([output, changes]) => {
+      if (!mounted) return;
+      setLines(output.map((chunk) => chunk.text));
+      setFiles(Array.from(new Set(changes.map((change) => change.relativePath))));
+    });
+
+    const closeStream = connectSessionStream({
       token: props.token,
       sessionId: props.sessionId,
       onEvent(event: RealtimeEvent) {
@@ -27,6 +36,10 @@ export function SessionConsole(props: {
         }
       }
     });
+    return () => {
+      mounted = false;
+      closeStream();
+    };
   }, [props.token, props.sessionId]);
 
   return (

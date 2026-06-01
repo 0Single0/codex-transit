@@ -92,6 +92,8 @@ export function App() {
         <SessionConsole
           token={token}
           sessionId={selectedSessionId}
+          loadFileChanges={() => api.sessionFileChanges(selectedSessionId)}
+          loadOutput={() => api.sessionOutput(selectedSessionId)}
           onSend={(text) => api.sendSessionInput(selectedSessionId, text).then(() => undefined)}
           onStart={() => api.startSession(selectedSessionId).then(() => undefined)}
           onStop={() => api.stopSession(selectedSessionId).then(() => undefined)}
