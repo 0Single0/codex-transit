@@ -8,6 +8,8 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::path_utils::normalize_for_windows_process_path;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectEntry {
     pub project_id: Uuid,
@@ -27,7 +29,7 @@ impl ProjectRegistry {
         if !root.exists() || !root.is_dir() {
             bail!("project directory does not exist");
         }
-        let root = root.canonicalize().unwrap_or(root);
+        let root = normalize_for_windows_process_path(&root.canonicalize().unwrap_or(root));
         if let Some(existing) = self.projects.values().find(|project| project.root == root) {
             return Ok(existing.clone());
         }
@@ -59,7 +61,10 @@ impl ProjectRegistry {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let entries: Vec<ProjectEntry> = serde_json::from_str(&fs::read_to_string(path)?)?;
+        let mut entries: Vec<ProjectEntry> = serde_json::from_str(&fs::read_to_string(path)?)?;
+        for entry in &mut entries {
+            entry.root = normalize_for_windows_process_path(&entry.root);
+        }
         Ok(Self {
             projects: entries
                 .into_iter()

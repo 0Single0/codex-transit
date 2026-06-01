@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use codex_transit_agent::codex_adapter::{
-    format_spawn_error, prepare_command_invocation, prepare_command_invocation_with_cmd,
+    format_error_chain, format_spawn_error, prepare_command_invocation, prepare_command_invocation_with_cmd,
     resolve_codex_command_from_path, CodexAdapter, CodexExecOptions,
 };
 
@@ -107,4 +107,22 @@ fn formats_spawn_errors_with_attempted_command() {
 
     assert!(message.contains("program not found"));
     assert!(message.contains("D:/nodejs/codex.cmd"));
+}
+
+#[test]
+fn includes_context_in_error_chain_message() {
+    let invocation = prepare_command_invocation(
+        PathBuf::from("D:/nodejs/codex.cmd"),
+        vec!["exec".to_string(), "-".to_string()],
+    );
+    let error = anyhow::Error::new(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "program not found",
+    ))
+    .context(format_spawn_error(&invocation));
+    let message = format_error_chain(&error);
+
+    assert!(message.contains("failed to start Codex command"));
+    assert!(message.contains("program not found"));
+    assert!(message.contains("caused by"));
 }

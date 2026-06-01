@@ -37,6 +37,30 @@ fn missing_registry_file_loads_empty() {
     assert!(loaded.list().is_empty());
 }
 
+#[cfg(windows)]
+#[test]
+fn loading_registry_normalizes_windows_verbatim_root_paths() {
+    let file = temp_file("codex-transit-projects-verbatim.json");
+    fs::write(
+        &file,
+        r#"[
+  {
+    "project_id": "00000000-0000-4000-8000-000000000010",
+    "display_name": "codex-transit",
+    "path_alias": "codex-transit",
+    "root": "\\\\?\\E:\\code\\codex-transit",
+    "available": true
+  }
+]"#,
+    )
+    .unwrap();
+
+    let loaded = ProjectRegistry::load_from_file(&file).unwrap();
+    fs::remove_file(file).ok();
+    let entry = loaded.list().pop().unwrap();
+    assert_eq!(entry.root, PathBuf::from("E:\\code\\codex-transit"));
+}
+
 fn temp_file(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("{}-{}", uuid::Uuid::new_v4(), name))
 }

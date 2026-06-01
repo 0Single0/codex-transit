@@ -5,6 +5,7 @@ pub mod codex_history;
 pub mod commands;
 pub mod diff_provider;
 pub mod file_watcher;
+pub mod path_utils;
 pub mod path_guard;
 pub mod project_registry;
 pub mod project_sync;

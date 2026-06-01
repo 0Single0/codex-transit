@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
-    codex_adapter::{CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput},
+    codex_adapter::{format_error_chain, CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput},
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
     file_watcher::FileChange,
@@ -225,7 +225,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                 self.record_process_output(ProcessOutput {
                     session_id,
                     stream: OutputStream::Stderr,
-                    text: format!("Codex 启动失败: {error}"),
+                    text: format!("Codex 启动失败: {}", format_error_chain(&error)),
                 })
                 .await?;
                 return Ok(());

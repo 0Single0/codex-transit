@@ -8,6 +8,8 @@ use tokio::{
 };
 use uuid::Uuid;
 
+use crate::path_utils::normalize_for_windows_process_path;
+
 #[derive(Debug)]
 pub struct ProcessOutput {
     pub session_id: Uuid,
@@ -60,10 +62,11 @@ impl CodexAdapter {
         working_dir: PathBuf,
         options: CodexExecOptions,
     ) -> CodexExecCommand {
+        let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
         let mut args = vec![
             "exec".to_string(),
             "--cd".to_string(),
-            working_dir.to_string_lossy().replace('\\', "/"),
+            normalized_working_dir.to_string_lossy().replace('\\', "/"),
         ];
         if let Some(sandbox) = options.sandbox {
             args.push("--sandbox".to_string());
@@ -135,6 +138,7 @@ impl CodexAdapter {
         prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
+        let working_dir = normalize_for_windows_process_path(&working_dir);
         let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
         let mut child = Command::new(&invocation.program)
             .args(&invocation.args)
@@ -295,6 +299,14 @@ pub fn format_spawn_error(invocation: &ProcessInvocation) -> String {
         invocation.program,
         invocation.args.join(" ")
     )
+}
+
+pub fn format_error_chain(error: &anyhow::Error) -> String {
+    let mut parts = vec![error.to_string()];
+    for cause in error.chain().skip(1) {
+        parts.push(cause.to_string());
+    }
+    parts.join(" | caused by: ")
 }
 
 impl CodexSessionProcess {
