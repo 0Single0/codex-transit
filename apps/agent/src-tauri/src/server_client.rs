@@ -2,8 +2,24 @@ use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+use url::Url;
 
 use crate::protocol::RealtimeEvent;
+
+pub fn agent_realtime_url(base_url: &str, device_id: &str, token: &str) -> Result<Url> {
+    let mut url = Url::parse(base_url)?;
+    url.set_scheme(match url.scheme() {
+        "https" => "wss",
+        _ => "ws"
+    })
+    .map_err(|_| anyhow::anyhow!("invalid realtime url scheme"))?;
+    url.set_path("/realtime");
+    url.query_pairs_mut()
+        .append_pair("role", "agent")
+        .append_pair("token", token)
+        .append_pair("deviceId", device_id);
+    Ok(url)
+}
 
 pub struct ServerClient {
     url: String
