@@ -18,7 +18,6 @@ export function SessionConsole(props: {
   projectName: string;
   projectPath: string;
   historyMessages: CodexHistoryMessage[];
-  loadOutput: () => Promise<TerminalOutputChunk[]>;
   onBack: () => void;
   onHistory: () => void;
   onSend: (text: string) => Promise<void>;
@@ -46,12 +45,6 @@ export function SessionConsole(props: {
   ];
 
   useEffect(() => {
-    let mounted = true;
-    void props.loadOutput().then((nextOutput) => {
-      if (!mounted) return;
-      setOutput(nextOutput);
-    });
-
     const stream = connectSessionStream({
       token: props.token,
       sessionId: props.sessionId,
@@ -71,7 +64,6 @@ export function SessionConsole(props: {
       }
     });
     return () => {
-      mounted = false;
       if (timeoutHandle.current) {
         window.clearTimeout(timeoutHandle.current);
         timeoutHandle.current = null;

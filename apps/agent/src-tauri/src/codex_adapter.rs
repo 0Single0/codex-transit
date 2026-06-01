@@ -1,4 +1,8 @@
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    path::PathBuf,
+    sync::OnceLock,
+};
 
 use anyhow::{Context, Result};
 use tokio::{
@@ -220,25 +224,27 @@ impl CodexAdapter {
         exec: CodexExecCommand,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
-        use tokio::fs::OpenOptions as TokioOpenOptions;
-        use tokio::io::{AsyncSeekExt, SeekFrom};
+        static START_MARKER: OnceLock<String> = OnceLock::new();
+        let marker = START_MARKER.get_or_init(|| {
+            format!(
+                "=== CODEX_TRANSIT_START_{} ===",
+                uuid::Uuid::new_v4().simple()
+            )
+        });
 
         let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
         let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
-        let output_path = crate::session_trace::ensure_session_output_file(session_id)?;
-        let output_path_str = output_path.to_string_lossy().replace('\'', "''");
         let title = format!("Codex {}", session_id);
         let script = format!(
             "$ErrorActionPreference='Stop'; \
 $Host.UI.RawUI.WindowTitle='{title}'; \
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false); \
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); \
-$PSDefaultParameterValues['Out-File:Encoding']='utf8'; \
-$enc = [System.Text.UTF8Encoding]::new($false); \
-[System.IO.File]::WriteAllText('{output_path_str}', '', $enc); \
+Write-Output '{marker}'; \
 $cmd = @('{program}'{args}); \
-& $cmd[0] @($cmd[1..($cmd.Length-1)]) 2>&1 | Tee-Object -FilePath '{output_path_str}'; \
+& $cmd[0] @($cmd[1..($cmd.Length-1)]); \
 if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
+            marker = escape_ps_single_quoted(marker),
             program = escape_ps_single_quoted(&invocation.program),
             args = invocation
                 .args
@@ -247,52 +253,79 @@ if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
                 .collect::<String>(),
         );
 
-        let child = Command::new("powershell")
+        let mut child = Command::new("powershell")
             .arg("-NoLogo")
             .arg("-NoExit")
             .arg("-Command")
             .arg(script)
             .current_dir(normalized_working_dir)
             .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .with_context(|| format_spawn_error(&invocation))?;
 
-        let tx = output_tx.clone();
-        let mut reader = TokioOpenOptions::new().read(true).open(&output_path).await?;
-        tokio::spawn(async move {
-            let mut position: u64 = 0;
-            let mut idle_ticks: u16 = 0;
-            loop {
+        if let Some(stdout) = child.stdout.take() {
+            let marker = marker.clone();
+            let tx = output_tx.clone();
+            tokio::spawn(async move {
+                let mut stdout = stdout;
                 let mut buffer = vec![0_u8; 4096];
-                if reader.seek(SeekFrom::Start(position)).await.is_err() {
-                    break;
-                }
-                match reader.read(&mut buffer).await {
-                    Ok(0) => {
-                        idle_ticks = idle_ticks.saturating_add(1);
-                        if idle_ticks > 6000 {
-                            break;
+                let mut started = false;
+                loop {
+                    let Ok(read) = stdout.read(&mut buffer).await else {
+                        break;
+                    };
+                    if read == 0 {
+                        break;
+                    }
+                    let mut text = String::from_utf8_lossy(&buffer[..read]).to_string();
+                    if !started {
+                        if let Some(index) = text.find(&marker) {
+                            let mut rest = text[(index + marker.len())..].to_string();
+                            rest = rest.trim_start_matches(['\r', '\n']).to_string();
+                            text = rest;
+                            started = true;
+                        } else {
+                            continue;
                         }
-                        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
                     }
-                    Ok(read) => {
-                        idle_ticks = 0;
-                        position += read as u64;
-                        let text = String::from_utf8_lossy(&buffer[..read]).to_string();
-                        let _ = tx
-                            .send(ProcessOutput {
-                                session_id,
-                                stream: OutputStream::Stdout,
-                                text,
-                            })
-                            .await;
+                    if text.is_empty() {
+                        continue;
                     }
-                    Err(_) => break,
+                    let _ = tx
+                        .send(ProcessOutput {
+                            session_id,
+                            stream: OutputStream::Stdout,
+                            text,
+                        })
+                        .await;
                 }
-            }
-        });
+            });
+        }
+        if let Some(stderr) = child.stderr.take() {
+            let tx = output_tx;
+            tokio::spawn(async move {
+                let mut stderr = stderr;
+                let mut buffer = vec![0_u8; 4096];
+                loop {
+                    let Ok(read) = stderr.read(&mut buffer).await else {
+                        break;
+                    };
+                    if read == 0 {
+                        break;
+                    }
+                    let text = String::from_utf8_lossy(&buffer[..read]).to_string();
+                    let _ = tx
+                        .send(ProcessOutput {
+                            session_id,
+                            stream: OutputStream::Stderr,
+                            text,
+                        })
+                        .await;
+                }
+            });
+        }
 
         Ok(CodexSessionProcess { child })
     }

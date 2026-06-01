@@ -6,14 +6,12 @@ use uuid::Uuid;
 
 use crate::{
     codex_adapter::{
-        describe_invocation, format_error_chain, prepare_command_invocation, CodexAdapter,
-        CodexExecOptions, CodexSessionProcess, OutputStream, ProcessOutput,
+        format_error_chain, CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput,
     },
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
     file_watcher::FileChange,
     protocol::RealtimeEvent,
-    session_trace::append_trace_line,
 };
 
 pub trait ManagedSessionProcess {
@@ -214,33 +212,11 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             bail!("project is not registered");
         };
         let resume_id = codex_session_id.or(context.codex_session_id);
-        let _ = append_trace_line(session_id, &format!("USER> {text}"));
         let process_result = if let Some(resume_id) = resume_id {
-            let command = CodexAdapter::default().build_resume_command(
-                project_root.clone(),
-                &resume_id,
-                CodexExecOptions::default(),
-            );
-            let invocation =
-                prepare_command_invocation(std::path::PathBuf::from(command.program), command.args);
-            let _ = append_trace_line(
-                session_id,
-                &format!("EXEC> {}", describe_invocation(&invocation, &project_root)),
-            );
             self.runner
                 .resume_session(session_id, project_root, resume_id, text, self.output_tx.clone())
                 .await
         } else {
-            let command = CodexAdapter::default().build_exec_command(
-                project_root.clone(),
-                CodexExecOptions::default(),
-            );
-            let invocation =
-                prepare_command_invocation(std::path::PathBuf::from(command.program), command.args);
-            let _ = append_trace_line(
-                session_id,
-                &format!("EXEC> {}", describe_invocation(&invocation, &project_root)),
-            );
             self.runner
                 .start_session(session_id, project_root, text, self.output_tx.clone())
                 .await
@@ -248,10 +224,6 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let process = match process_result {
             Ok(process) => process,
             Err(error) => {
-                let _ = append_trace_line(
-                    session_id,
-                    &format!("ERR> Codex 启动失败: {}", format_error_chain(&error)),
-                );
                 self.record_process_output(ProcessOutput {
                     session_id,
                     stream: OutputStream::Stderr,
@@ -261,7 +233,6 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                 return Ok(());
             }
         };
-        let _ = append_trace_line(session_id, "INFO> Codex process started");
         self.sessions.entry(session_id).or_default().push(process);
         Ok(())
     }
@@ -279,11 +250,6 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
     }
 
     pub async fn record_process_output(&mut self, output: ProcessOutput) -> Result<()> {
-        let prefix = match output.stream {
-            OutputStream::Stdout => "STDOUT>",
-            OutputStream::Stderr => "STDERR>",
-        };
-        let _ = append_trace_line(output.session_id, &format!("{prefix} {}", output.text));
         let event = self.output_to_event(output)?;
         self.outbound_tx.send(event).await?;
         Ok(())

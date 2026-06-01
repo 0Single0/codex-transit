@@ -12,7 +12,6 @@ pub mod project_sync;
 pub mod protocol;
 pub mod server_client;
 pub mod session_manager;
-pub mod session_trace;
 
 use commands::{
     add_project, bind_device, choose_project_directory, get_agent_runtime_status,

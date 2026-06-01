@@ -124,16 +124,12 @@ describe("ApiClient", () => {
     });
   });
 
-  it("loads session history endpoints", async () => {
+  it("loads session messages endpoint", async () => {
     const http = createHttpMock([]);
     const api = new ApiClient("token", http);
 
-    await api.sessionOutput("session-1");
-    await api.sessionFileChanges("session-1");
     await api.sessionMessages("session-1");
 
-    expect(http.request).toHaveBeenCalledWith(expect.objectContaining({ url: "/sessions/session-1/output" }));
-    expect(http.request).toHaveBeenCalledWith(expect.objectContaining({ url: "/sessions/session-1/file-changes" }));
     expect(http.request).toHaveBeenCalledWith(expect.objectContaining({ url: "/sessions/session-1/messages" }));
   });
 

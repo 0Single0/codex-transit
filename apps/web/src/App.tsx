@@ -276,7 +276,6 @@ export function App() {
             sessionId={selectedSessionId}
             projectName={selectedProject.displayName}
             projectPath={selectedProject.pathAlias}
-            loadOutput={async () => (await runAuthorized(() => api.sessionOutput(selectedSessionId))) ?? []}
             onBack={() => {
               setSelectedSessionId(null);
               setSelectedProject(null);

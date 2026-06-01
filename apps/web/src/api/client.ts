@@ -2,11 +2,9 @@ import type {
   CreateBindCodeResponse,
   DeviceProjectsResponse,
   DeviceSummary,
-  FileChangeHistory,
   LoginResponse,
   SessionMessage,
-  SessionSummary,
-  TerminalOutputChunk
+  SessionSummary
 } from "@codex-transit/shared";
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from "axios";
 
@@ -61,14 +59,6 @@ export class ApiClient {
 
   async sessions(projectId: string): Promise<SessionSummary[]> {
     return this.request(`/projects/${projectId}/sessions`);
-  }
-
-  async sessionOutput(sessionId: string): Promise<TerminalOutputChunk[]> {
-    return this.request(`/sessions/${sessionId}/output`);
-  }
-
-  async sessionFileChanges(sessionId: string): Promise<FileChangeHistory[]> {
-    return this.request(`/sessions/${sessionId}/file-changes`);
   }
 
   async sessionMessages(sessionId: string): Promise<SessionMessage[]> {

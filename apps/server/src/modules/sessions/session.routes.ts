@@ -84,24 +84,6 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     return { ok: true, requestId: event.requestId };
   });
 
-  app.get("/sessions/:sessionId/output", async (request) => {
-    const user = await requireUser(request);
-    const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
-    return app.prisma.terminalOutputChunk.findMany({
-      where: { session: { id: params.sessionId, userId: user.id } },
-      orderBy: { seq: "asc" }
-    });
-  });
-
-  app.get("/sessions/:sessionId/file-changes", async (request) => {
-    const user = await requireUser(request);
-    const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
-    return app.prisma.fileChangeEvent.findMany({
-      where: { session: { id: params.sessionId, userId: user.id } },
-      orderBy: { createdAt: "asc" }
-    });
-  });
-
   app.get("/sessions/:sessionId/messages", async (request) => {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);

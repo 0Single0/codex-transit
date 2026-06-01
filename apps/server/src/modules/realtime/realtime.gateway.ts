@@ -67,23 +67,6 @@ export async function registerRealtimeGateway(app: FastifyInstance) {
       if (event.type === "codex.history.result" || event.type === "codex.history.detail.result") {
         connectionRegistry.broadcastToDeviceViewers(event.deviceId, event);
       }
-      if (event.type === "codex.output.chunk") {
-        await app.prisma.terminalOutputChunk.upsert({
-          where: { sessionId_seq: { sessionId: event.sessionId, seq: event.seq } },
-          update: { text: event.text, stream: event.stream },
-          create: { sessionId: event.sessionId, seq: event.seq, stream: event.stream, text: event.text }
-        });
-      }
-      if (event.type === "file.changed") {
-        await app.prisma.fileChangeEvent.create({
-          data: {
-            sessionId: event.sessionId,
-            relativePath: event.relativePath,
-            oldRelativePath: event.oldRelativePath ?? null,
-            changeType: event.changeType
-          }
-        });
-      }
     });
 
     socket.send(JSON.stringify({ type: "connected", userId: userId! }));
