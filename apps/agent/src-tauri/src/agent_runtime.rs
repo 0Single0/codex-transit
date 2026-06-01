@@ -1,7 +1,13 @@
 use anyhow::Result;
 
-use crate::{protocol::RealtimeEvent, session_manager::SessionManager};
+use crate::{
+    protocol::RealtimeEvent,
+    session_manager::{SessionManager, SessionProcessRunner},
+};
 
-pub fn dispatch_event(manager: &mut SessionManager, event: RealtimeEvent) -> Result<()> {
-    manager.handle_event(event)
+pub async fn dispatch_event<R: SessionProcessRunner>(
+    manager: &mut SessionManager<R>,
+    event: RealtimeEvent,
+) -> Result<()> {
+    manager.handle_event(event).await
 }
