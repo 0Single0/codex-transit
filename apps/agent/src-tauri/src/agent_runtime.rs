@@ -34,3 +34,9 @@ pub async fn forward_next_outbound_event<R: SessionProcessRunner>(
     outbound_tx.send(event).await?;
     Ok(true)
 }
+
+pub async fn pump_next_process_output<R: SessionProcessRunner>(
+    manager: &mut SessionManager<R>,
+) -> Result<bool> {
+    manager.pump_process_output_once().await
+}

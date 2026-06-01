@@ -1,6 +1,9 @@
 use anyhow::Result;
 use codex_transit_agent::{
-    agent_runtime::{dispatch_event, forward_next_outbound_event, handle_next_inbound_event},
+    agent_runtime::{
+        dispatch_event, forward_next_outbound_event, handle_next_inbound_event,
+        pump_next_process_output,
+    },
     codex_adapter::{OutputStream, ProcessOutput},
     protocol::RealtimeEvent,
     session_manager::{ManagedSessionProcess, SessionManager, SessionProcessRunner},
@@ -15,6 +18,7 @@ use uuid::Uuid;
 #[derive(Default, Clone)]
 struct RuntimeRunner {
     inputs: Arc<Mutex<Vec<String>>>,
+    output_txs: Arc<Mutex<Vec<mpsc::Sender<ProcessOutput>>>>,
 }
 
 struct RuntimeProcess {
@@ -28,12 +32,45 @@ impl SessionProcessRunner for RuntimeRunner {
         &self,
         _session_id: Uuid,
         _working_dir: PathBuf,
-        _output_tx: mpsc::Sender<ProcessOutput>,
+        output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
+        self.output_txs.lock().unwrap().push(output_tx);
         Ok(RuntimeProcess {
             inputs: self.inputs.clone(),
         })
     }
+}
+
+#[tokio::test]
+async fn pumps_process_output_into_outbound_events() {
+    let runner = RuntimeRunner::default();
+    let output_txs = runner.output_txs.clone();
+    let mut manager = SessionManager::new(runner);
+    let session_id = "00000000-0000-4000-8000-000000000005".parse().unwrap();
+    let project_id = "00000000-0000-4000-8000-000000000004".parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager
+        .handle_event(session_start_event(project_id, session_id))
+        .await
+        .unwrap();
+    let output_tx = output_txs.lock().unwrap().first().unwrap().clone();
+    output_tx
+        .send(ProcessOutput {
+            session_id,
+            stream: OutputStream::Stdout,
+            text: "from child".to_string(),
+        })
+        .await
+        .unwrap();
+
+    assert!(pump_next_process_output(&mut manager).await.unwrap());
+
+    let event = manager.next_outbound_event().await.unwrap();
+    assert!(matches!(
+        event,
+        RealtimeEvent::CodexOutputChunk { text, .. } if text == "from child"
+    ));
 }
 
 impl ManagedSessionProcess for RuntimeProcess {
