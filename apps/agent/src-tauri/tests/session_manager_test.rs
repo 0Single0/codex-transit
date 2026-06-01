@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 use codex_transit_agent::{
-    codex_adapter::ProcessOutput,
+    codex_adapter::{OutputStream, ProcessOutput},
     protocol::RealtimeEvent,
     session_manager::{ManagedSessionProcess, SessionManager, SessionProcessRunner},
 };
@@ -14,6 +14,8 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 const SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
+const USER_ID: &str = "00000000-0000-4000-8000-000000000002";
+const DEVICE_ID: &str = "00000000-0000-4000-8000-000000000003";
 const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000004";
 
 #[derive(Default, Clone)]
@@ -47,6 +49,17 @@ impl SessionProcessRunner for FakeRunner {
             session_id,
             state: self.state.clone(),
         })
+    }
+}
+
+fn start_event() -> RealtimeEvent {
+    RealtimeEvent::SessionStart {
+        event_id: "00000000-0000-4000-8000-000000000010".parse().unwrap(),
+        timestamp: "2026-06-01T00:00:00.000Z".to_string(),
+        user_id: USER_ID.parse().unwrap(),
+        device_id: DEVICE_ID.parse().unwrap(),
+        project_id: PROJECT_ID.parse().unwrap(),
+        session_id: SESSION_ID.parse().unwrap(),
     }
 }
 
@@ -131,24 +144,14 @@ async fn handles_start_and_input_events() {
 
     manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
 
-    manager
-        .handle_event(RealtimeEvent::SessionStart {
-            event_id: "00000000-0000-4000-8000-000000000010".parse().unwrap(),
-            timestamp: "2026-06-01T00:00:00.000Z".to_string(),
-            user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
-            device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
-            project_id,
-            session_id,
-        })
-        .await
-        .unwrap();
+    manager.handle_event(start_event()).await.unwrap();
 
     manager
         .handle_event(RealtimeEvent::SessionInput {
             event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
             timestamp: "2026-06-01T00:00:01.000Z".to_string(),
-            user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
-            device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
+            user_id: USER_ID.parse().unwrap(),
+            device_id: DEVICE_ID.parse().unwrap(),
             project_id,
             session_id,
             text: "implement it".to_string(),
@@ -166,6 +169,89 @@ async fn handles_start_and_input_events() {
             .unwrap(),
         vec!["implement it".to_string()]
     );
+}
+
+#[tokio::test]
+async fn converts_codex_process_output_to_realtime_chunk() {
+    let mut manager = SessionManager::new(FakeRunner::default());
+    let session_id = SESSION_ID.parse().unwrap();
+    let expected_user_id: Uuid = USER_ID.parse().unwrap();
+    let expected_device_id: Uuid = DEVICE_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.handle_event(start_event()).await.unwrap();
+    manager
+        .record_process_output(ProcessOutput {
+            session_id,
+            stream: OutputStream::Stdout,
+            text: "hello from codex".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let event = manager.next_outbound_event().await.unwrap();
+
+    assert!(matches!(
+        event,
+        RealtimeEvent::CodexOutputChunk {
+            user_id,
+            device_id,
+            project_id: chunk_project_id,
+            session_id: chunk_session_id,
+            seq: 0,
+            stream,
+            text,
+            ..
+        } if user_id == expected_user_id
+            && device_id == expected_device_id
+            && chunk_project_id == project_id
+            && chunk_session_id == session_id
+            && stream == "stdout"
+            && text == "hello from codex"
+    ));
+}
+
+#[tokio::test]
+async fn increments_output_sequence_per_session() {
+    let mut manager = SessionManager::new(FakeRunner::default());
+    let session_id = SESSION_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.handle_event(start_event()).await.unwrap();
+    manager
+        .record_process_output(ProcessOutput {
+            session_id,
+            stream: OutputStream::Stdout,
+            text: "first".to_string(),
+        })
+        .await
+        .unwrap();
+    manager
+        .record_process_output(ProcessOutput {
+            session_id,
+            stream: OutputStream::Stderr,
+            text: "second".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let first = manager.next_outbound_event().await.unwrap();
+    let second = manager.next_outbound_event().await.unwrap();
+
+    assert!(matches!(
+        first,
+        RealtimeEvent::CodexOutputChunk { seq: 0, .. }
+    ));
+    assert!(matches!(
+        second,
+        RealtimeEvent::CodexOutputChunk {
+            seq: 1,
+            stream,
+            ..
+        } if stream == "stderr"
+    ));
 }
 
 #[tokio::test]

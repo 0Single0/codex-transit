@@ -4,52 +4,60 @@ use anyhow::Result;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, Command},
-    sync::mpsc
+    sync::mpsc,
 };
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct ProcessOutput {
+    pub session_id: Uuid,
     pub stream: OutputStream,
-    pub text: String
+    pub text: String,
 }
 
 #[derive(Debug)]
 pub enum OutputStream {
     Stdout,
-    Stderr
+    Stderr,
 }
 
 pub struct CodexSessionProcess {
     child: Child,
-    stdin: ChildStdin
+    stdin: ChildStdin,
 }
 
 pub struct CodexAdapter {
-    command: String
+    command: String,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct CodexExecOptions {
     pub sandbox: Option<String>,
-    pub model: Option<String>
+    pub model: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CodexExecCommand {
     pub program: String,
-    pub args: Vec<String>
+    pub args: Vec<String>,
 }
 
 impl CodexAdapter {
     pub fn new(command: impl Into<String>) -> Self {
-        Self { command: command.into() }
+        Self {
+            command: command.into(),
+        }
     }
 
-    pub fn build_exec_command(&self, working_dir: PathBuf, options: CodexExecOptions) -> CodexExecCommand {
+    pub fn build_exec_command(
+        &self,
+        working_dir: PathBuf,
+        options: CodexExecOptions,
+    ) -> CodexExecCommand {
         let mut args = vec![
             "exec".to_string(),
             "--cd".to_string(),
-            working_dir.to_string_lossy().replace('\\', "/")
+            working_dir.to_string_lossy().replace('\\', "/"),
         ];
         if let Some(sandbox) = options.sandbox {
             args.push("--sandbox".to_string());
@@ -62,14 +70,15 @@ impl CodexAdapter {
         args.push("-".to_string());
         CodexExecCommand {
             program: self.command.clone(),
-            args
+            args,
         }
     }
 
     pub async fn start(
         &self,
+        session_id: Uuid,
         working_dir: PathBuf,
-        output_tx: mpsc::Sender<ProcessOutput>
+        output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
         let exec = self.build_exec_command(working_dir.clone(), CodexExecOptions::default());
         let mut child = Command::new(exec.program)
@@ -88,8 +97,9 @@ impl CodexAdapter {
                 while let Ok(Some(line)) = lines.next_line().await {
                     let _ = tx
                         .send(ProcessOutput {
+                            session_id,
                             stream: OutputStream::Stdout,
-                            text: line
+                            text: line,
                         })
                         .await;
                 }
@@ -102,8 +112,9 @@ impl CodexAdapter {
                 while let Ok(Some(line)) = lines.next_line().await {
                     let _ = tx
                         .send(ProcessOutput {
+                            session_id,
                             stream: OutputStream::Stderr,
-                            text: line
+                            text: line,
                         })
                         .await;
                 }

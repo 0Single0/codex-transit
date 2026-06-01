@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
-    codex_adapter::{CodexAdapter, CodexSessionProcess, ProcessOutput},
+    codex_adapter::{CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput},
     protocol::RealtimeEvent,
 };
 
@@ -29,7 +29,19 @@ pub struct SessionManager<R: SessionProcessRunner = CodexAdapter> {
     runner: R,
     projects: HashMap<Uuid, PathBuf>,
     sessions: HashMap<Uuid, R::Process>,
+    contexts: HashMap<Uuid, SessionContext>,
+    output_seq: HashMap<Uuid, u64>,
     output_tx: mpsc::Sender<ProcessOutput>,
+    output_rx: mpsc::Receiver<ProcessOutput>,
+    outbound_tx: mpsc::Sender<RealtimeEvent>,
+    outbound_rx: mpsc::Receiver<RealtimeEvent>,
+}
+
+#[derive(Clone)]
+struct SessionContext {
+    user_id: Uuid,
+    device_id: Uuid,
+    project_id: Uuid,
 }
 
 impl SessionManager<CodexAdapter> {
@@ -40,12 +52,18 @@ impl SessionManager<CodexAdapter> {
 
 impl<R: SessionProcessRunner> SessionManager<R> {
     pub fn new(runner: R) -> Self {
-        let (output_tx, _output_rx) = mpsc::channel(256);
+        let (output_tx, output_rx) = mpsc::channel(256);
+        let (outbound_tx, outbound_rx) = mpsc::channel(256);
         Self {
             runner,
             projects: HashMap::new(),
             sessions: HashMap::new(),
+            contexts: HashMap::new(),
+            output_seq: HashMap::new(),
             output_tx,
+            output_rx,
+            outbound_tx,
+            outbound_rx,
         }
     }
 
@@ -57,9 +75,21 @@ impl<R: SessionProcessRunner> SessionManager<R> {
         match event {
             RealtimeEvent::SessionStart {
                 session_id,
+                user_id,
+                device_id,
                 project_id,
                 ..
-            } => self.start_session(session_id, project_id).await,
+            } => {
+                self.start_session_with_context(
+                    session_id,
+                    SessionContext {
+                        user_id,
+                        device_id,
+                        project_id,
+                    },
+                )
+                .await
+            }
             RealtimeEvent::SessionInput {
                 session_id, text, ..
             } => self.send_input(session_id, text).await,
@@ -72,7 +102,23 @@ impl<R: SessionProcessRunner> SessionManager<R> {
     }
 
     pub async fn start_session(&mut self, session_id: Uuid, project_id: Uuid) -> Result<()> {
-        let Some(project_root) = self.projects.get(&project_id).cloned() else {
+        self.start_session_with_context(
+            session_id,
+            SessionContext {
+                user_id: Uuid::nil(),
+                device_id: Uuid::nil(),
+                project_id,
+            },
+        )
+        .await
+    }
+
+    async fn start_session_with_context(
+        &mut self,
+        session_id: Uuid,
+        context: SessionContext,
+    ) -> Result<()> {
+        let Some(project_root) = self.projects.get(&context.project_id).cloned() else {
             bail!("project is not registered");
         };
         let process = self
@@ -80,6 +126,8 @@ impl<R: SessionProcessRunner> SessionManager<R> {
             .start_session(session_id, project_root, self.output_tx.clone())
             .await?;
         self.sessions.insert(session_id, process);
+        self.contexts.insert(session_id, context);
+        self.output_seq.insert(session_id, 0);
         Ok(())
     }
 
@@ -96,6 +144,44 @@ impl<R: SessionProcessRunner> SessionManager<R> {
         };
         process.stop().await
     }
+
+    pub async fn record_process_output(&mut self, output: ProcessOutput) -> Result<()> {
+        let event = self.output_to_event(output)?;
+        self.outbound_tx.send(event).await?;
+        Ok(())
+    }
+
+    pub async fn next_outbound_event(&mut self) -> Option<RealtimeEvent> {
+        self.outbound_rx.recv().await
+    }
+
+    pub async fn pump_process_output_once(&mut self) -> Result<bool> {
+        let Some(output) = self.output_rx.recv().await else {
+            return Ok(false);
+        };
+        self.record_process_output(output).await?;
+        Ok(true)
+    }
+
+    fn output_to_event(&mut self, output: ProcessOutput) -> Result<RealtimeEvent> {
+        let Some(context) = self.contexts.get(&output.session_id).cloned() else {
+            bail!("session is not running");
+        };
+        let seq = self.output_seq.entry(output.session_id).or_insert(0);
+        let event = RealtimeEvent::CodexOutputChunk {
+            event_id: Uuid::new_v4(),
+            timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+            user_id: context.user_id,
+            device_id: context.device_id,
+            project_id: context.project_id,
+            session_id: output.session_id,
+            seq: *seq,
+            stream: stream_name(output.stream).to_string(),
+            text: output.text,
+        };
+        *seq += 1;
+        Ok(event)
+    }
 }
 
 impl Default for SessionManager<CodexAdapter> {
@@ -109,11 +195,11 @@ impl SessionProcessRunner for CodexAdapter {
 
     async fn start_session(
         &self,
-        _session_id: Uuid,
+        session_id: Uuid,
         working_dir: PathBuf,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
-        self.start(working_dir, output_tx).await
+        self.start(session_id, working_dir, output_tx).await
     }
 }
 
@@ -124,5 +210,12 @@ impl ManagedSessionProcess for CodexSessionProcess {
 
     async fn stop(&mut self) -> Result<()> {
         CodexSessionProcess::stop(self).await
+    }
+}
+
+fn stream_name(stream: OutputStream) -> &'static str {
+    match stream {
+        OutputStream::Stdout => "stdout",
+        OutputStream::Stderr => "stderr",
     }
 }
