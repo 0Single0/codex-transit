@@ -311,3 +311,18 @@
   - apps/agent/src/i18n.ts：补充中英文扫码内容文案
   - apps/agent/src/styles.css：支持 textarea 表单样式
   - package.json：让 pnpm test 顺序执行 workspace 测试
+
+[2026-06-01]
+用户输入：继续
+完成：手机端 diff 结果实时展示 (majx)
+  - Web 会话控制台消费 diff.result 实时事件并展示 diff 预览
+  - 抽出 diff 结果状态更新函数并补充单元测试
+  - 为 Web 和 Agent 增加 Vitest 配置，避免 Windows 默认 forks pool 的 spawn UNKNOWN
+
+涉及文件：
+  - apps/web/src/components/SessionConsole.tsx：订阅并展示 diff.result
+  - apps/web/src/sessionDiffs.ts：封装 diff 预览状态更新
+  - apps/web/src/sessionDiffs.test.ts：覆盖 diff 结果插入顺序
+  - apps/web/src/i18n.ts：补充 diff 预览文案
+  - apps/web/src/styles.css：增加 diff 预览样式
+  - apps/web/vitest.config.ts、apps/agent/vitest.config.ts：配置 Vitest threads pool

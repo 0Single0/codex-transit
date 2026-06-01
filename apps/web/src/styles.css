@@ -217,3 +217,24 @@ button {
   font-size: 0.78rem;
   text-transform: uppercase;
 }
+
+.diff-card {
+  display: grid;
+  gap: 8px;
+}
+
+.diff-output {
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #d9e1e5;
+  border-radius: 8px;
+  padding: 10px;
+  color: #d7e2ea;
+  background: #11181c;
+  white-space: pre-wrap;
+}
+
+.diff-output.error {
+  color: #ffd7d1;
+}

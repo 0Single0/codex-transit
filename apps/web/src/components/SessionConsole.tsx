@@ -7,6 +7,7 @@ import type {
 import { useEffect, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
 import type { WebMessages } from "../i18n";
+import { applyDiffResult, type DiffPreview } from "../sessionDiffs";
 
 export function SessionConsole(props: {
   labels: WebMessages;
@@ -22,6 +23,7 @@ export function SessionConsole(props: {
 }) {
   const [lines, setLines] = useState<string[]>([]);
   const [files, setFiles] = useState<string[]>([]);
+  const [diffs, setDiffs] = useState<DiffPreview[]>([]);
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [prompt, setPrompt] = useState("");
 
@@ -45,6 +47,9 @@ export function SessionConsole(props: {
         }
         if (event.type === "file.changed") {
           setFiles((current) => Array.from(new Set([...current, event.relativePath])));
+        }
+        if (event.type === "diff.result") {
+          setDiffs((current) => applyDiffResult(current, event));
         }
       }
     });
@@ -98,6 +103,19 @@ export function SessionConsole(props: {
           </button>
         ))}
       </aside>
+      <section className="panel stack">
+        <h2>{props.labels.diffPreview}</h2>
+        {diffs.length ? (
+          diffs.map((diff, index) => (
+            <article className="diff-card" key={`${diff.relativePath}-${index}`}>
+              <strong>{diff.relativePath}</strong>
+              <pre className={diff.ok ? "diff-output" : "diff-output error"}>{diff.text}</pre>
+            </article>
+          ))
+        ) : (
+          <p className="empty-state">{props.labels.noDiffs}</p>
+        )}
+      </section>
     </section>
   );
 }
