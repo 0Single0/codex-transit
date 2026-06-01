@@ -2,6 +2,8 @@ pub mod codex_adapter;
 pub mod file_watcher;
 pub mod path_guard;
 pub mod project_registry;
+pub mod protocol;
+pub mod server_client;
 
 pub fn run() {
     tauri::Builder::default()

@@ -1,0 +1,84 @@
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum RealtimeEvent {
+    #[serde(rename = "session.start", rename_all = "camelCase")]
+    SessionStart {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid
+    },
+    #[serde(rename = "session.input", rename_all = "camelCase")]
+    SessionInput {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        text: String
+    },
+    #[serde(rename = "session.stop", rename_all = "camelCase")]
+    SessionStop {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid
+    },
+    #[serde(rename = "diff.request", rename_all = "camelCase")]
+    DiffRequest {
+        event_id: Uuid,
+        request_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        relative_path: String
+    },
+    #[serde(rename = "codex.output.chunk", rename_all = "camelCase")]
+    CodexOutputChunk {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        seq: u64,
+        stream: String,
+        text: String
+    },
+    #[serde(rename = "file.changed", rename_all = "camelCase")]
+    FileChanged {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        relative_path: String,
+        old_relative_path: Option<String>,
+        change_type: String
+    },
+    #[serde(rename = "diff.result", rename_all = "camelCase")]
+    DiffResult {
+        event_id: Uuid,
+        request_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        relative_path: String,
+        ok: bool,
+        diff: Option<String>,
+        error: Option<String>
+    }
+}
