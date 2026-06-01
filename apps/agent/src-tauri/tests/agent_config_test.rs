@@ -1,8 +1,8 @@
 use codex_transit_agent::{
     agent_config::{AgentConfig, AgentSettings},
     commands::{
-        build_project_sync_request_from_state, get_saved_agent_settings,
-        save_agent_settings_in_state, AgentState,
+        build_project_sync_request_from_state, build_realtime_config_from_state,
+        get_saved_agent_settings, save_agent_settings_in_state, AgentState,
     },
     project_registry::ProjectRegistry,
 };
@@ -91,4 +91,23 @@ fn rejects_project_sync_request_when_agent_is_unconfigured() {
     let err = build_project_sync_request_from_state(&state).unwrap_err();
 
     assert!(err.contains("agent is not configured"));
+}
+
+#[test]
+fn builds_realtime_config_from_agent_state() {
+    let state = AgentState::default();
+    save_agent_settings_in_state(
+        &state,
+        AgentSettings {
+            server_url: "http://localhost:4000".to_string(),
+            device_id: "00000000-0000-4000-8000-000000000003".to_string(),
+            device_token: "device-token".to_string(),
+        },
+    )
+    .unwrap();
+
+    let config = build_realtime_config_from_state(&state).unwrap();
+
+    assert_eq!(config.url.scheme(), "ws");
+    assert_eq!(config.device_id, "00000000-0000-4000-8000-000000000003");
 }

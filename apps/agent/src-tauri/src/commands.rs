@@ -6,6 +6,7 @@ use crate::{
     agent_config::{AgentConfig, AgentSettings},
     project_registry::{ProjectEntry, ProjectRegistry},
     project_sync::{sync_projects_from_registry, ProjectSyncHttpClient, ProjectSyncRequest},
+    server_client::AgentRealtimeConfig,
 };
 
 pub struct AgentState {
@@ -94,4 +95,10 @@ pub async fn sync_projects_now(state: State<'_, AgentState>) -> Result<(), Strin
     ProjectSyncHttpClient::send(request)
         .await
         .map_err(|error| error.to_string())
+}
+
+pub fn build_realtime_config_from_state(state: &AgentState) -> Result<AgentRealtimeConfig, String> {
+    let settings =
+        get_saved_agent_settings(state)?.ok_or_else(|| "agent is not configured".to_string())?;
+    AgentRealtimeConfig::from_settings(&settings).map_err(|error| error.to_string())
 }

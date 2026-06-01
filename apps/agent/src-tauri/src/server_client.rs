@@ -4,13 +4,13 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
-use crate::protocol::RealtimeEvent;
+use crate::{agent_config::AgentSettings, protocol::RealtimeEvent};
 
 pub fn agent_realtime_url(base_url: &str, device_id: &str, token: &str) -> Result<Url> {
     let mut url = Url::parse(base_url)?;
     url.set_scheme(match url.scheme() {
         "https" => "wss",
-        _ => "ws"
+        _ => "ws",
     })
     .map_err(|_| anyhow::anyhow!("invalid realtime url scheme"))?;
     url.set_path("/realtime");
@@ -22,7 +22,25 @@ pub fn agent_realtime_url(base_url: &str, device_id: &str, token: &str) -> Resul
 }
 
 pub struct ServerClient {
-    url: String
+    url: String,
+}
+
+pub struct AgentRealtimeConfig {
+    pub url: Url,
+    pub device_id: String,
+}
+
+impl AgentRealtimeConfig {
+    pub fn from_settings(settings: &AgentSettings) -> Result<Self> {
+        Ok(Self {
+            url: agent_realtime_url(
+                &settings.server_url,
+                &settings.device_id,
+                &settings.device_token,
+            )?,
+            device_id: settings.device_id.clone(),
+        })
+    }
 }
 
 impl ServerClient {
@@ -33,7 +51,7 @@ impl ServerClient {
     pub async fn connect(
         &self,
         outbound_rx: mpsc::Receiver<RealtimeEvent>,
-        inbound_tx: mpsc::Sender<RealtimeEvent>
+        inbound_tx: mpsc::Sender<RealtimeEvent>,
     ) -> Result<()> {
         let (socket, _) = connect_async(&self.url).await?;
         let (mut write, mut read) = socket.split();
