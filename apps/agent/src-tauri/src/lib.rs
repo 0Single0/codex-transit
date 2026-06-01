@@ -4,6 +4,7 @@ pub mod diff_provider;
 pub mod file_watcher;
 pub mod path_guard;
 pub mod project_registry;
+pub mod project_sync;
 pub mod protocol;
 pub mod server_client;
 pub mod session_manager;
