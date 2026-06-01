@@ -8,6 +8,7 @@ use codex_transit_agent::{
         save_agent_settings_in_state, start_agent_runtime_in_state, AgentState,
     },
     project_registry::ProjectRegistry,
+    session_trace::{session_log_path, session_output_path},
 };
 
 #[test]
@@ -223,4 +224,14 @@ fn marks_runtime_stopped() {
     mark_agent_runtime_stopped(&state).unwrap();
 
     assert!(!get_agent_runtime_status_from_state(&state).unwrap().running);
+}
+
+#[test]
+fn separates_trace_and_output_paths() {
+    let session_id = uuid::Uuid::parse_str("00000000-0000-4000-8000-000000000099").unwrap();
+    let trace = session_log_path(session_id);
+    let output = session_output_path(session_id);
+    assert_ne!(trace, output);
+    assert!(trace.to_string_lossy().contains("session-logs"));
+    assert!(output.to_string_lossy().contains("session-output"));
 }

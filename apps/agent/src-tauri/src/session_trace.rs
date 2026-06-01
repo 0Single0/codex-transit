@@ -31,6 +31,17 @@ pub fn ensure_session_log_file(session_id: Uuid) -> Result<PathBuf> {
     Ok(path)
 }
 
+pub fn ensure_session_output_file(session_id: Uuid) -> Result<PathBuf> {
+    let path = session_output_path(session_id);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if !path.exists() {
+        OpenOptions::new().create(true).append(true).open(&path)?;
+    }
+    Ok(path)
+}
+
 fn default_agent_home() -> PathBuf {
     env::var_os("CODEX_TRANSIT_AGENT_HOME")
         .map(PathBuf::from)
@@ -47,4 +58,10 @@ pub fn session_log_path(session_id: Uuid) -> PathBuf {
     default_agent_home()
         .join("session-logs")
         .join(format!("{session_id}.log"))
+}
+
+pub fn session_output_path(session_id: Uuid) -> PathBuf {
+    default_agent_home()
+        .join("session-output")
+        .join(format!("{session_id}.out.log"))
 }

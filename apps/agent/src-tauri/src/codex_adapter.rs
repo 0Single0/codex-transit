@@ -225,8 +225,8 @@ impl CodexAdapter {
 
         let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
         let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
-        let log_path = crate::session_trace::ensure_session_log_file(session_id)?;
-        let log_path_str = log_path.to_string_lossy().replace('\'', "''");
+        let output_path = crate::session_trace::ensure_session_output_file(session_id)?;
+        let output_path_str = output_path.to_string_lossy().replace('\'', "''");
         let title = format!("Codex {}", session_id);
         let script = format!(
             "$ErrorActionPreference='Stop'; \
@@ -235,9 +235,9 @@ $Host.UI.RawUI.WindowTitle='{title}'; \
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); \
 $PSDefaultParameterValues['Out-File:Encoding']='utf8'; \
 $enc = [System.Text.UTF8Encoding]::new($false); \
-[System.IO.File]::WriteAllText('{log_path_str}', '', $enc); \
+[System.IO.File]::WriteAllText('{output_path_str}', '', $enc); \
 $cmd = @('{program}'{args}); \
-& $cmd[0] @($cmd[1..($cmd.Length-1)]) 2>&1 | Tee-Object -FilePath '{log_path_str}'; \
+& $cmd[0] @($cmd[1..($cmd.Length-1)]) 2>&1 | Tee-Object -FilePath '{output_path_str}'; \
 if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
             program = escape_ps_single_quoted(&invocation.program),
             args = invocation
@@ -260,7 +260,7 @@ if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
             .with_context(|| format_spawn_error(&invocation))?;
 
         let tx = output_tx.clone();
-        let mut reader = TokioOpenOptions::new().read(true).open(&log_path).await?;
+        let mut reader = TokioOpenOptions::new().read(true).open(&output_path).await?;
         tokio::spawn(async move {
             let mut position: u64 = 0;
             let mut idle_ticks: u16 = 0;
