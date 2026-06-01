@@ -1,3 +1,5 @@
+use std::{fs, path::PathBuf};
+
 use codex_transit_agent::{
     agent_config::{AgentConfig, AgentSettings},
     commands::{
@@ -23,6 +25,38 @@ fn stores_and_reads_agent_connection_settings() {
 }
 
 #[test]
+fn saves_and_loads_agent_config_file() {
+    let mut config = AgentConfig::default();
+    let settings = AgentSettings {
+        server_url: "https://relay.example.com".to_string(),
+        device_id: "00000000-0000-4000-8000-000000000003".to_string(),
+        device_token: "secret".to_string(),
+    };
+    let file = temp_file("codex-transit-settings.json");
+
+    config.update(settings.clone());
+    config.save_to_file(&file).unwrap();
+    let loaded = AgentConfig::load_from_file(&file).unwrap();
+
+    fs::remove_file(file).ok();
+    assert_eq!(loaded.get(), Some(settings));
+}
+
+#[test]
+fn missing_agent_config_file_loads_empty() {
+    let file = temp_file("missing-codex-transit-settings.json");
+    fs::remove_file(&file).ok();
+
+    let loaded = AgentConfig::load_from_file(&file).unwrap();
+
+    assert!(loaded.get().is_none());
+}
+
+fn temp_file(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("{}-{}", uuid::Uuid::new_v4(), name))
+}
+
+#[test]
 fn reports_unconfigured_before_settings_are_saved() {
     let config = AgentConfig::default();
 
@@ -31,10 +65,38 @@ fn reports_unconfigured_before_settings_are_saved() {
 
 #[test]
 fn agent_state_owns_projects_and_config() {
-    let state = codex_transit_agent::commands::AgentState::default();
+    let root = temp_file("empty-agent-state");
+    let state = codex_transit_agent::commands::AgentState::with_storage(&root);
 
+    fs::remove_dir_all(root).ok();
     assert!(state.config.lock().unwrap().get().is_none());
     assert!(state.projects.lock().unwrap().list().is_empty());
+}
+
+#[test]
+fn agent_state_loads_saved_config_and_projects_from_storage() {
+    let root = temp_file("codex-transit-agent-storage");
+    let state = AgentState::with_storage(&root);
+    let settings = AgentSettings {
+        server_url: "https://relay.example.com".to_string(),
+        device_id: "00000000-0000-4000-8000-000000000003".to_string(),
+        device_token: "secret".to_string(),
+    };
+
+    save_agent_settings_in_state(&state, settings.clone()).unwrap();
+    {
+        let mut projects = state.projects.lock().unwrap();
+        projects.add_project(std::env::temp_dir()).unwrap();
+        projects
+            .save_to_file(&root.join("projects.json"))
+            .unwrap();
+    }
+
+    let loaded = AgentState::with_storage(&root);
+
+    fs::remove_dir_all(root).ok();
+    assert_eq!(get_saved_agent_settings(&loaded).unwrap(), Some(settings));
+    assert_eq!(loaded.projects.lock().unwrap().list().len(), 1);
 }
 
 #[test]
@@ -46,7 +108,7 @@ fn default_project_registry_remains_empty() {
 
 #[test]
 fn saves_and_reads_settings_through_agent_state_helpers() {
-    let state = AgentState::default();
+    let state = AgentState::with_storage(temp_file("settings-through-state"));
     let settings = AgentSettings {
         server_url: "https://relay.example.com".to_string(),
         device_id: "00000000-0000-4000-8000-000000000003".to_string(),
@@ -60,7 +122,7 @@ fn saves_and_reads_settings_through_agent_state_helpers() {
 
 #[test]
 fn builds_project_sync_request_from_agent_state() {
-    let state = AgentState::default();
+    let state = AgentState::with_storage(temp_file("sync-request-state"));
     let settings = AgentSettings {
         server_url: "http://localhost:4000".to_string(),
         device_id: "00000000-0000-4000-8000-000000000003".to_string(),
@@ -87,7 +149,7 @@ fn builds_project_sync_request_from_agent_state() {
 
 #[test]
 fn rejects_project_sync_request_when_agent_is_unconfigured() {
-    let state = AgentState::default();
+    let state = AgentState::with_storage(temp_file("unconfigured-sync-state"));
 
     let err = build_project_sync_request_from_state(&state).unwrap_err();
 
@@ -96,7 +158,7 @@ fn rejects_project_sync_request_when_agent_is_unconfigured() {
 
 #[test]
 fn builds_realtime_config_from_agent_state() {
-    let state = AgentState::default();
+    let state = AgentState::with_storage(temp_file("realtime-config-state"));
     save_agent_settings_in_state(
         &state,
         AgentSettings {
@@ -115,7 +177,7 @@ fn builds_realtime_config_from_agent_state() {
 
 #[test]
 fn rejects_runtime_start_when_agent_is_unconfigured() {
-    let state = AgentState::default();
+    let state = AgentState::with_storage(temp_file("unconfigured-runtime-state"));
 
     let err = start_agent_runtime_in_state(&state).unwrap_err();
 
@@ -124,7 +186,7 @@ fn rejects_runtime_start_when_agent_is_unconfigured() {
 
 #[test]
 fn marks_runtime_running_and_prevents_duplicate_start() {
-    let state = AgentState::default();
+    let state = AgentState::with_storage(temp_file("running-runtime-state"));
     save_agent_settings_in_state(
         &state,
         AgentSettings {
@@ -146,7 +208,7 @@ fn marks_runtime_running_and_prevents_duplicate_start() {
 
 #[test]
 fn marks_runtime_stopped() {
-    let state = AgentState::default();
+    let state = AgentState::with_storage(temp_file("stopped-runtime-state"));
     save_agent_settings_in_state(
         &state,
         AgentSettings {

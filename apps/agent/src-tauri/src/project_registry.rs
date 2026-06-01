@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
@@ -23,6 +27,10 @@ impl ProjectRegistry {
         if !root.exists() || !root.is_dir() {
             bail!("project directory does not exist");
         }
+        let root = root.canonicalize().unwrap_or(root);
+        if let Some(existing) = self.projects.values().find(|project| project.root == root) {
+            return Ok(existing.clone());
+        }
         let display_name = root
             .file_name()
             .and_then(|value| value.to_str())
@@ -33,7 +41,7 @@ impl ProjectRegistry {
             path_alias: display_name.clone(),
             display_name,
             root,
-            available: true
+            available: true,
         };
         self.projects.insert(entry.project_id, entry.clone());
         Ok(entry)
@@ -45,5 +53,27 @@ impl ProjectRegistry {
 
     pub fn list(&self) -> Vec<ProjectEntry> {
         self.projects.values().cloned().collect()
+    }
+
+    pub fn load_from_file(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let entries: Vec<ProjectEntry> = serde_json::from_str(&fs::read_to_string(path)?)?;
+        Ok(Self {
+            projects: entries
+                .into_iter()
+                .map(|entry| (entry.project_id, entry))
+                .collect(),
+        })
+    }
+
+    pub fn save_to_file(&self, path: &Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let body = serde_json::to_string_pretty(&self.list())?;
+        fs::write(path, body)?;
+        Ok(())
     }
 }

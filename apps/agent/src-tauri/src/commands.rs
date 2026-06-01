@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Mutex};
+use std::{
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use serde::{Deserialize, Serialize};
 use tokio::{sync::{mpsc, oneshot}, task::JoinHandle};
@@ -21,14 +24,67 @@ pub struct AgentState {
     pub projects: Mutex<ProjectRegistry>,
     pub config: Mutex<AgentConfig>,
     pub runtime: Mutex<AgentRuntimeState>,
+    storage: AgentStorage,
 }
 
 impl Default for AgentState {
     fn default() -> Self {
+        let storage = AgentStorage::default();
         Self {
-            projects: Mutex::new(ProjectRegistry::default()),
-            config: Mutex::new(AgentConfig::default()),
+            projects: Mutex::new(
+                ProjectRegistry::load_from_file(&storage.projects_path).unwrap_or_default(),
+            ),
+            config: Mutex::new(AgentConfig::load_from_file(&storage.settings_path).unwrap_or_default()),
             runtime: Mutex::new(AgentRuntimeState::default()),
+            storage,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AgentStorage {
+    settings_path: PathBuf,
+    projects_path: PathBuf,
+}
+
+impl Default for AgentStorage {
+    fn default() -> Self {
+        Self::new(default_storage_dir())
+    }
+}
+
+impl AgentStorage {
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        let root = root.into();
+        Self {
+            settings_path: root.join("settings.json"),
+            projects_path: root.join("projects.json"),
+        }
+    }
+}
+
+fn default_storage_dir() -> PathBuf {
+    std::env::var_os("CODEX_TRANSIT_AGENT_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::var_os("APPDATA")
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+                .unwrap_or_else(std::env::temp_dir)
+                .join("codex-transit-agent")
+        })
+}
+
+impl AgentState {
+    pub fn with_storage(root: impl AsRef<Path>) -> Self {
+        let storage = AgentStorage::new(root.as_ref());
+        Self {
+            projects: Mutex::new(
+                ProjectRegistry::load_from_file(&storage.projects_path).unwrap_or_default(),
+            ),
+            config: Mutex::new(AgentConfig::load_from_file(&storage.settings_path).unwrap_or_default()),
+            runtime: Mutex::new(AgentRuntimeState::default()),
+            storage,
         }
     }
 }
@@ -62,9 +118,13 @@ pub fn add_project(path: String, state: State<AgentState>) -> Result<ProjectEntr
         .projects
         .lock()
         .map_err(|_| "project registry locked".to_string())?;
-    projects
+    let entry = projects
         .add_project(PathBuf::from(path))
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    projects
+        .save_to_file(&state.storage.projects_path)
+        .map_err(|error| error.to_string())?;
+    Ok(entry)
 }
 
 #[tauri::command]
@@ -85,6 +145,9 @@ pub fn save_agent_settings_in_state(
         .lock()
         .map_err(|_| "agent config locked".to_string())?;
     config.update(settings);
+    config
+        .save_to_file(&state.storage.settings_path)
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
