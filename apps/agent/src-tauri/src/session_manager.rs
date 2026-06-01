@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::{
     codex_adapter::{CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput},
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
+    file_watcher::FileChange,
     protocol::RealtimeEvent,
 };
 
@@ -181,6 +182,30 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         };
         self.record_process_output(output).await?;
         Ok(true)
+    }
+
+    pub async fn record_file_change(&mut self, change: FileChange) -> Result<()> {
+        let events = self
+            .contexts
+            .iter()
+            .filter(|(_, context)| context.project_id == change.project_id)
+            .map(|(session_id, context)| RealtimeEvent::FileChanged {
+                event_id: Uuid::new_v4(),
+                timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                user_id: context.user_id,
+                device_id: context.device_id,
+                project_id: context.project_id,
+                session_id: *session_id,
+                relative_path: change.relative_path.clone(),
+                old_relative_path: change.old_relative_path.clone(),
+                change_type: change.change_type.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        for event in events {
+            self.outbound_tx.send(event).await?;
+        }
+        Ok(())
     }
 
     async fn handle_diff_request(

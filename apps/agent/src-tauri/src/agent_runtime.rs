@@ -1,7 +1,12 @@
+use std::path::Path;
+
 use anyhow::Result;
+use notify::Event;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use crate::{
+    file_watcher::event_to_file_changes,
     protocol::RealtimeEvent,
     session_manager::{SessionManager, SessionProcessRunner},
 };
@@ -39,4 +44,19 @@ pub async fn pump_next_process_output<R: SessionProcessRunner>(
     manager: &mut SessionManager<R>,
 ) -> Result<bool> {
     manager.pump_process_output_once().await
+}
+
+pub async fn pump_next_file_change<R: SessionProcessRunner>(
+    manager: &mut SessionManager<R>,
+    file_event_rx: &mut mpsc::Receiver<Event>,
+    project_id: Uuid,
+    project_root: &Path,
+) -> Result<bool> {
+    let Some(event) = file_event_rx.recv().await else {
+        return Ok(false);
+    };
+    for change in event_to_file_changes(project_id, project_root, event) {
+        manager.record_file_change(change).await?;
+    }
+    Ok(true)
 }

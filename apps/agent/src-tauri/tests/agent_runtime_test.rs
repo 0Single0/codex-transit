@@ -2,12 +2,13 @@ use anyhow::Result;
 use codex_transit_agent::{
     agent_runtime::{
         dispatch_event, forward_next_outbound_event, handle_next_inbound_event,
-        pump_next_process_output,
+        pump_next_file_change, pump_next_process_output,
     },
     codex_adapter::{OutputStream, ProcessOutput},
     protocol::RealtimeEvent,
     session_manager::{ManagedSessionProcess, SessionManager, SessionProcessRunner},
 };
+use notify::{event::ModifyKind, Event, EventKind};
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -70,6 +71,45 @@ async fn pumps_process_output_into_outbound_events() {
     assert!(matches!(
         event,
         RealtimeEvent::CodexOutputChunk { text, .. } if text == "from child"
+    ));
+}
+
+#[tokio::test]
+async fn pumps_file_watcher_event_into_outbound_events() {
+    let mut manager = SessionManager::new(RuntimeRunner::default());
+    let (watch_tx, watch_rx) = mpsc::channel(8);
+    let session_id = "00000000-0000-4000-8000-000000000005".parse().unwrap();
+    let project_id = "00000000-0000-4000-8000-000000000004".parse().unwrap();
+    let project_root = PathBuf::from("C:/projects/demo");
+
+    manager.register_project(project_id, project_root.clone());
+    manager
+        .handle_event(session_start_event(project_id, session_id))
+        .await
+        .unwrap();
+    watch_tx
+        .send(
+            Event::new(EventKind::Modify(ModifyKind::Any))
+                .add_path(PathBuf::from("C:/projects/demo/src/main.rs")),
+        )
+        .await
+        .unwrap();
+
+    let mut watch_rx = watch_rx;
+    assert!(
+        pump_next_file_change(&mut manager, &mut watch_rx, project_id, &project_root)
+            .await
+            .unwrap()
+    );
+
+    let event = manager.next_outbound_event().await.unwrap();
+    assert!(matches!(
+        event,
+        RealtimeEvent::FileChanged {
+            relative_path,
+            change_type,
+            ..
+        } if relative_path == "src/main.rs" && change_type == "modified"
     ));
 }
 

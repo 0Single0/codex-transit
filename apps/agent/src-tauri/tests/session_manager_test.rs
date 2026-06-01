@@ -8,6 +8,7 @@ use anyhow::Result;
 use codex_transit_agent::{
     codex_adapter::{OutputStream, ProcessOutput},
     diff_provider::ProjectDiffProvider,
+    file_watcher::FileChange,
     protocol::RealtimeEvent,
     session_manager::{ManagedSessionProcess, SessionManager, SessionProcessRunner},
 };
@@ -126,7 +127,7 @@ async fn starts_session_for_registered_project_root() {
     let runner = FakeRunner::default();
     let state = runner.state.clone();
     let mut manager = SessionManager::new(runner);
-    let session_id = SESSION_ID.parse().unwrap();
+    let session_id: Uuid = SESSION_ID.parse().unwrap();
     let project_id = PROJECT_ID.parse().unwrap();
     let project_root = PathBuf::from("C:/projects/demo");
 
@@ -393,5 +394,45 @@ async fn handles_diff_provider_errors_with_failed_diff_result() {
             error: Some(error),
             ..
         } if error.contains("outside project")
+    ));
+}
+
+#[tokio::test]
+async fn records_file_change_as_outbound_event_for_running_session() {
+    let mut manager = SessionManager::new(FakeRunner::default());
+    let session_id: Uuid = SESSION_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.handle_event(start_event()).await.unwrap();
+    manager
+        .record_file_change(FileChange {
+            project_id,
+            relative_path: "src/main.rs".to_string(),
+            old_relative_path: None,
+            change_type: "modified".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let event = manager.next_outbound_event().await.unwrap();
+
+    assert!(matches!(
+        event,
+        RealtimeEvent::FileChanged {
+            user_id,
+            device_id,
+            project_id: event_project_id,
+            session_id: event_session_id,
+            relative_path,
+            old_relative_path: None,
+            change_type,
+            ..
+        } if user_id == USER_ID.parse::<Uuid>().unwrap()
+            && device_id == DEVICE_ID.parse::<Uuid>().unwrap()
+            && event_project_id == project_id
+            && event_session_id == session_id
+            && relative_path == "src/main.rs"
+            && change_type == "modified"
     ));
 }
