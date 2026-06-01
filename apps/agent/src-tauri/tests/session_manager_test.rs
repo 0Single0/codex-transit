@@ -50,3 +50,22 @@ fn handles_start_and_input_events() {
 
     assert_eq!(manager.recorded_inputs(session_id), vec!["implement it".to_string()]);
 }
+
+#[test]
+fn stop_event_removes_running_session() {
+    let mut manager = SessionManager::default();
+    let session_id = SESSION_ID.parse().unwrap();
+
+    manager.start_recording_session(session_id);
+    manager.handle_event(RealtimeEvent::SessionStop {
+        event_id: "00000000-0000-4000-8000-000000000012".parse().unwrap(),
+        timestamp: "2026-06-01T00:00:02.000Z".to_string(),
+        user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
+        device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
+        project_id: "00000000-0000-4000-8000-000000000004".parse().unwrap(),
+        session_id
+    }).unwrap();
+
+    let err = manager.send_input(session_id, "after stop".to_string()).unwrap_err();
+    assert!(err.to_string().contains("session is not running"));
+}

@@ -1,3 +1,4 @@
+pub mod agent_runtime;
 pub mod codex_adapter;
 pub mod commands;
 pub mod diff_provider;
