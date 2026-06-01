@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs::{self, File},
     io::{BufRead, BufReader},
     path::{Component, Path, PathBuf},
@@ -49,6 +50,11 @@ pub fn list_codex_history_from_home(
 
     let file = File::open(index_path)?;
     let reader = BufReader::new(file);
+    let project_session_ids = options
+        .project_root
+        .as_ref()
+        .map(|project_root| collect_project_session_ids(codex_home, project_root))
+        .transpose()?;
     let mut sessions = Vec::new();
     for line in reader.lines() {
         let line = line?;
@@ -56,8 +62,8 @@ pub fn list_codex_history_from_home(
             continue;
         }
         let parsed: SessionIndexLine = serde_json::from_str(&line)?;
-        if let Some(project_root) = &options.project_root {
-            if !session_belongs_to_project(codex_home, &parsed.id, project_root)? {
+        if let Some(project_session_ids) = &project_session_ids {
+            if !project_session_ids.contains(&parsed.id) {
                 continue;
             }
         }
@@ -166,21 +172,46 @@ fn find_session_file_in_dir(root: &Path, codex_session_id: &str) -> Result<Optio
     Ok(None)
 }
 
-fn session_belongs_to_project(
-    codex_home: &Path,
-    codex_session_id: &str,
-    project_root: &Path,
-) -> Result<bool> {
-    let Some(path) = find_session_file(codex_home, codex_session_id)? else {
-        return Ok(false);
-    };
-    let Some(cwd) = read_session_cwd(&path)? else {
-        return Ok(false);
-    };
-    Ok(normalize_path(&cwd) == normalize_path(project_root))
+fn collect_project_session_ids(codex_home: &Path, project_root: &Path) -> Result<HashSet<String>> {
+    let mut ids = HashSet::new();
+    let normalized_project_root = normalize_path(project_root);
+    for root in [
+        codex_home.join("sessions"),
+        codex_home.join("archived_sessions"),
+    ] {
+        if root.exists() {
+            collect_project_session_ids_in_dir(&root, &normalized_project_root, &mut ids)?;
+        }
+    }
+    Ok(ids)
 }
 
-fn read_session_cwd(path: &Path) -> Result<Option<PathBuf>> {
+fn collect_project_session_ids_in_dir(
+    root: &Path,
+    normalized_project_root: &str,
+    ids: &mut HashSet<String>,
+) -> Result<()> {
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_project_session_ids_in_dir(&path, normalized_project_root, ids)?;
+        } else if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".jsonl"))
+        {
+            if let Some((session_id, cwd)) = read_session_meta(&path)? {
+                if normalize_path(&cwd) == normalized_project_root {
+                    ids.insert(session_id);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn read_session_meta(path: &Path) -> Result<Option<(String, PathBuf)>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     for line in reader.lines() {
@@ -194,11 +225,16 @@ fn read_session_cwd(path: &Path) -> Result<Option<PathBuf>> {
         if value.get("type").and_then(Value::as_str) != Some("session_meta") {
             continue;
         }
-        return Ok(value
-            .get("payload")
-            .and_then(|payload| payload.get("cwd"))
-            .and_then(Value::as_str)
-            .map(PathBuf::from));
+        let Some(payload) = value.get("payload") else {
+            return Ok(None);
+        };
+        let Some(session_id) = payload.get("id").and_then(Value::as_str) else {
+            return Ok(None);
+        };
+        let Some(cwd) = payload.get("cwd").and_then(Value::as_str) else {
+            return Ok(None);
+        };
+        return Ok(Some((session_id.to_string(), PathBuf::from(cwd))));
     }
     Ok(None)
 }

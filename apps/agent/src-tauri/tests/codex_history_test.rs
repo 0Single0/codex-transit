@@ -94,6 +94,48 @@ fn matches_codex_history_when_project_root_uses_windows_verbatim_prefix() {
 }
 
 #[test]
+fn filters_codex_history_without_scanning_for_each_index_row() {
+    let root = unique_temp_dir();
+    let session_dir = root.join("sessions/2026/06/01");
+    fs::create_dir_all(&session_dir).unwrap();
+    let mut index_lines = Vec::new();
+    for i in 0..120 {
+        let id = format!("session-{i}");
+        index_lines.push(format!(
+            r#"{{"id":"{id}","thread_name":"Session {i}","updated_at":"2026-06-01T09:{:02}:00.000Z"}}"#,
+            i % 60
+        ));
+        let cwd = if i % 30 == 0 {
+            "C:\\work\\current"
+        } else {
+            "C:\\work\\other"
+        };
+        let escaped_cwd = cwd.replace('\\', "\\\\");
+        fs::write(
+            session_dir.join(format!("rollout-{id}.jsonl")),
+            format!(
+                r#"{{"timestamp":"2026-06-01T09:00:00.000Z","type":"session_meta","payload":{{"id":"{id}","cwd":"{escaped_cwd}"}}}}"#
+            ),
+        )
+        .unwrap();
+    }
+    fs::write(root.join("session_index.jsonl"), index_lines.join("\n")).unwrap();
+
+    let started = std::time::Instant::now();
+    let sessions = list_codex_history_from_home(
+        &root,
+        CodexHistoryListOptions {
+            limit: 10,
+            project_root: Some(PathBuf::from("C:/work/current")),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(sessions.len(), 4);
+    assert!(started.elapsed() < std::time::Duration::from_millis(300));
+}
+
+#[test]
 fn loads_codex_history_messages_from_session_rollout_file() {
     let root = unique_temp_dir();
     let session_dir = root.join("sessions/2026/06/01");
