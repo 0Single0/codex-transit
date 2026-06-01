@@ -89,7 +89,9 @@ pub async fn run_agent_once<R: SessionProcessRunner>(
         return Ok(true);
     }
     if let Ok(event) = inbound_rx.try_recv() {
-        dispatch_event(manager, event).await?;
+        if let Err(error) = dispatch_event(manager, event).await {
+            eprintln!("agent event dispatch failed: {error}");
+        }
         return Ok(true);
     }
     if let Ok(event) = file_event_rx.try_recv() {
@@ -116,7 +118,9 @@ pub async fn run_agent_once_with_file_changes<R: SessionProcessRunner>(
         return Ok(true);
     }
     if let Ok(event) = inbound_rx.try_recv() {
-        dispatch_event(manager, event).await?;
+        if let Err(error) = dispatch_event(manager, event).await {
+            eprintln!("agent event dispatch failed: {error}");
+        }
         return Ok(true);
     }
     if let Ok(change) = file_change_rx.try_recv() {

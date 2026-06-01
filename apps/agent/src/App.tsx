@@ -17,7 +17,6 @@ export function App() {
   const [password, setPassword] = useState("");
   const [loginPairing, setLoginPairing] = useState<AgentLoginPairing | null>(null);
   const [loginQr, setLoginQr] = useState<string | null>(null);
-  const [projectPath, setProjectPath] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [runtimeRunning, setRuntimeRunning] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,6 +50,11 @@ export function App() {
         setDeviceId(settings.deviceId);
         setDeviceToken(settings.deviceToken);
         setProjects(await api.listProjects());
+        if (!runtimeStatus.running) {
+          const status = await api.startRuntime();
+          setRuntimeRunning(status.running);
+          return;
+        }
       }
       setRuntimeRunning(runtimeStatus.running);
     } catch (caught) {
@@ -120,64 +124,27 @@ export function App() {
     setDeviceId(nextDeviceId);
     setDeviceToken(nextDeviceToken);
     setProjects(await api.listProjects());
+    await api.syncProjectsNow();
+    const status = await api.startRuntime();
+    setRuntimeRunning(status.running);
   }
 
-  async function addProject(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedPath = projectPath.trim();
-    if (!trimmedPath) return;
+  async function addProjectFromPicker() {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const project = await api.addProject(trimmedPath);
-      setProjects((current) => [project, ...current]);
-      setProjectPath("");
-      setMessage(labels.projectAdded);
-    } catch (caught) {
-      setError(toErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function syncProjects() {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
+      const selectedPath = await api.chooseProjectDirectory();
+      if (!selectedPath) return;
+      const project = await api.addProject(selectedPath);
+      setProjects((current) => [project, ...current.filter((item) => item.project_id !== project.project_id)]);
       await api.syncProjectsNow();
-      setMessage(labels.projectsSynced);
-    } catch (caught) {
-      setError(toErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function startRuntime() {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
+      if (runtimeRunning) {
+        await api.stopRuntime();
+      }
       const status = await api.startRuntime();
       setRuntimeRunning(status.running);
-      setMessage(labels.runtimeStarted);
-    } catch (caught) {
-      setError(toErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function stopRuntime() {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const status = await api.stopRuntime();
-      setRuntimeRunning(status.running);
-      setMessage(labels.runtimeStopped);
+      setMessage(labels.projectAdded);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -253,19 +220,9 @@ export function App() {
           <div className="layout-grid">
             <section className="panel" aria-labelledby="project-title">
               <h2 id="project-title">{labels.localProjects}</h2>
-              <form className="form-grid" onSubmit={addProject}>
-                <label>
-                  {labels.projectDirectory}
-                  <input
-                    value={projectPath}
-                    onChange={(event) => setProjectPath(event.target.value)}
-                    placeholder="E:\\code\\codex-transit"
-                  />
-                </label>
-                <button disabled={busy || !projectPath.trim()} type="submit">
-                  {labels.addProject}
-                </button>
-              </form>
+              <button disabled={busy} onClick={addProjectFromPicker} type="button">
+                {labels.addProject}
+              </button>
               {projects.length ? (
                 <ul className="project-list">
                   {projects.map((project) => (
@@ -281,17 +238,7 @@ export function App() {
             </section>
 
             <section className="panel" aria-label={labels.syncProjects}>
-              <div className="actions">
-                <button className="secondary" disabled={busy} onClick={syncProjects} type="button">
-                  {labels.syncProjects}
-                </button>
-                <button className="secondary" disabled={busy || runtimeRunning} onClick={startRuntime} type="button">
-                  {labels.startBridge}
-                </button>
-                <button className="secondary" disabled={busy || !runtimeRunning} onClick={stopRuntime} type="button">
-                  {labels.stopBridge}
-                </button>
-              </div>
+              <p className="hint">{runtimeRunning ? labels.bridgeAutoRunning : labels.bridgeAutoStarting}</p>
             </section>
           </div>
         )}

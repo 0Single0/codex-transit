@@ -453,3 +453,23 @@
   - apps/web/src/components/SessionConsole.tsx、styles.css：改为聊天界面和底部输入框
   - apps/web/src/conversationItems.ts、conversationItems.test.ts：合并用户消息和终端输出为聊天流
   - apps/web/src/App.tsx、i18n.ts：移除旧控制 props 并调整文案
+
+[2026-06-01]
+用户输入：继续；引入tailwind吧，不要写css文件；UI 1：1还原；发送之后还是没有执行；桌面端增加项目改为文件夹选择，新增项目默认同步，桥接默认在线
+完成：修复发送执行链路、桌面 Agent 默认桥接，并将手机端改为 Tailwind 移动端界面 (majx)
+  - Web 端引入 Tailwind 和 lucide-react，styles.css 仅保留 Tailwind 指令，页面样式迁移为 utility classes
+  - 手机端登录、设备列表、项目目录、聊天、历史、我的页面改为暗色移动端布局，底部导航仅保留“设备 / 我的”
+  - 修复选择项目后立即创建会话时 selectedProject 尚未更新导致会话不创建的问题，项目点击后可直接进入聊天
+  - 桌面 Agent 登录后自动保存配置、同步项目并启动 runtime，新增项目改为原生文件夹选择并自动同步/重启 runtime
+  - Agent 运行循环遇到单个坏事件不再退出；Codex CLI 启动失败会作为 stderr 终端输出同步到手机端
+
+涉及文件：
+  - apps/web/src/App.tsx：重写移动端主流程和底部导航，修复项目选择创建会话状态时序
+  - apps/web/src/components/*：登录、设备、项目、聊天、历史会话入口改为 Tailwind 暗色移动端界面
+  - apps/web/src/styles.css、tailwind.config.ts、postcss.config.cjs：接入 Tailwind，移除手写 CSS 类
+  - apps/web/src/assets/*：加入 Mac/Windows 设备图
+  - apps/web/package.json、pnpm-lock.yaml：加入 Tailwind、PostCSS、lucide-react 依赖
+  - apps/agent/src/App.tsx、agentApi.ts：登录后默认启动桥接，项目使用文件夹选择并自动同步
+  - apps/agent/src-tauri/src/commands.rs、lib.rs、Cargo.toml：新增 choose_project_directory Tauri 命令和 rfd 依赖
+  - apps/agent/src-tauri/src/session_manager.rs、agent_runtime.rs：发送失败输出回传，坏事件不终止 Agent 循环
+  - apps/agent/src-tauri/tests/*、apps/agent/src/agentApi.test.ts：补充回归测试

@@ -356,3 +356,32 @@ async fn run_agent_once_processes_ready_inbound_event() {
 
     assert_eq!(prompts.lock().unwrap().clone(), vec!["looped".to_string()]);
 }
+
+#[tokio::test]
+async fn run_agent_once_keeps_running_after_bad_inbound_event() {
+    let mut manager = SessionManager::new(RuntimeRunner::default());
+    let (inbound_tx, inbound_rx) = mpsc::channel(8);
+    let (outbound_tx, _outbound_rx) = mpsc::channel(8);
+    let (_watch_tx, watch_rx) = mpsc::channel(8);
+    let session_id = "00000000-0000-4000-8000-000000000005".parse().unwrap();
+    let project_id = "00000000-0000-4000-8000-000000000004".parse().unwrap();
+    let project_root = PathBuf::from("C:/projects/demo");
+
+    inbound_tx
+        .send(session_input_event(project_id, session_id, "missing context"))
+        .await
+        .unwrap();
+
+    let mut inbound_rx = inbound_rx;
+    let mut watch_rx = watch_rx;
+    assert!(run_agent_once(
+        &mut manager,
+        &mut inbound_rx,
+        &outbound_tx,
+        &mut watch_rx,
+        project_id,
+        &project_root,
+    )
+    .await
+    .unwrap());
+}

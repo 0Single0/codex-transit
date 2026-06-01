@@ -43,6 +43,9 @@ struct FakeProcess {
     state: Arc<Mutex<RunnerState>>,
 }
 
+#[derive(Default)]
+struct FailingRunner;
+
 impl SessionProcessRunner for FakeRunner {
     type Process = FakeProcess;
 
@@ -61,6 +64,20 @@ impl SessionProcessRunner for FakeRunner {
             session_id,
             state: self.state.clone(),
         })
+    }
+}
+
+impl SessionProcessRunner for FailingRunner {
+    type Process = FakeProcess;
+
+    async fn start_session(
+        &self,
+        _session_id: Uuid,
+        _working_dir: PathBuf,
+        _prompt: String,
+        _output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<Self::Process> {
+        anyhow::bail!("codex executable not found");
     }
 }
 
@@ -186,6 +203,28 @@ async fn starts_codex_for_each_input_prompt() {
         state.started_prompts,
         vec!["first".to_string(), "second".to_string()]
     );
+}
+
+#[tokio::test]
+async fn reports_codex_start_failures_as_output() {
+    let mut manager = SessionManager::new(FailingRunner);
+    let session_id = SESSION_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.start_session(session_id, project_id).await.unwrap();
+
+    manager
+        .send_input(session_id, "hello".to_string())
+        .await
+        .unwrap();
+
+    let event = manager.next_outbound_event().await.unwrap();
+    assert!(matches!(
+        event,
+        RealtimeEvent::CodexOutputChunk { stream, text, .. }
+            if stream == "stderr" && text.contains("codex executable not found")
+    ));
 }
 
 #[tokio::test]

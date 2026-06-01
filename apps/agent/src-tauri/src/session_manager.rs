@@ -156,10 +156,22 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let Some(project_root) = self.projects.get(&context.project_id).cloned() else {
             bail!("project is not registered");
         };
-        let process = self
+        let process = match self
             .runner
             .start_session(session_id, project_root, text, self.output_tx.clone())
-            .await?;
+            .await
+        {
+            Ok(process) => process,
+            Err(error) => {
+                self.record_process_output(ProcessOutput {
+                    session_id,
+                    stream: OutputStream::Stderr,
+                    text: format!("Codex 启动失败: {error}"),
+                })
+                .await?;
+                return Ok(());
+            }
+        };
         self.sessions.entry(session_id).or_default().push(process);
         Ok(())
     }

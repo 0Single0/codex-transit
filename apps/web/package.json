@@ -14,6 +14,7 @@
     "@codex-transit/shared": "workspace:*",
     "@vitejs/plugin-react": "^4.3.4",
     "axios": "^1.16.1",
+    "lucide-react": "^1.17.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -24,6 +25,9 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.16",
     "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.19",
     "vitest": "^2.1.8"
   }
 }

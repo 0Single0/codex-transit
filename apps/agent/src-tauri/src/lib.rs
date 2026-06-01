@@ -12,8 +12,9 @@ pub mod server_client;
 pub mod session_manager;
 
 use commands::{
-    add_project, bind_device, get_agent_runtime_status, get_agent_settings, list_projects,
-    save_agent_settings, start_agent_runtime, stop_agent_runtime, sync_projects_now, AgentState,
+    add_project, bind_device, choose_project_directory, get_agent_runtime_status,
+    get_agent_settings, list_projects, save_agent_settings, start_agent_runtime,
+    stop_agent_runtime, sync_projects_now, AgentState,
 };
 
 pub fn run() {
@@ -21,6 +22,7 @@ pub fn run() {
         .manage(AgentState::default())
         .invoke_handler(tauri::generate_handler![
             add_project,
+            choose_project_directory,
             list_projects,
             save_agent_settings,
             get_agent_settings,

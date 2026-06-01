@@ -82,6 +82,10 @@ export function createAgentApi(invoke: Invoke = tauriInvoke, fetcher: typeof fet
       return invoke<ProjectEntry>("add_project", { path });
     },
 
+    chooseProjectDirectory() {
+      return invoke<string | null>("choose_project_directory");
+    },
+
     syncProjectsNow() {
       return invoke<void>("sync_projects_now");
     },

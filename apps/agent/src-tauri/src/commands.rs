@@ -128,6 +128,13 @@ pub fn add_project(path: String, state: State<AgentState>) -> Result<ProjectEntr
 }
 
 #[tauri::command]
+pub fn choose_project_directory() -> Result<Option<String>, String> {
+    Ok(rfd::FileDialog::new()
+        .pick_folder()
+        .map(|path| path.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
 pub fn list_projects(state: State<AgentState>) -> Result<Vec<ProjectEntry>, String> {
     let projects = state
         .projects
