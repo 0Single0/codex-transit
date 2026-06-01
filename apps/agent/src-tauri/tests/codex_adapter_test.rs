@@ -6,7 +6,7 @@ use codex_transit_agent::codex_adapter::{
 };
 
 #[test]
-fn builds_codex_exec_command_with_project_and_prompt_stdin() {
+fn builds_codex_exec_command_with_project() {
     let adapter = CodexAdapter::new("codex");
     let command = adapter.build_exec_command(
         PathBuf::from("C:/work/project"),
@@ -26,8 +26,7 @@ fn builds_codex_exec_command_with_project_and_prompt_stdin() {
             "--sandbox",
             "workspace-write",
             "--model",
-            "gpt-5",
-            "-"
+            "gpt-5"
         ]
     );
 }
@@ -46,10 +45,11 @@ fn builds_codex_exec_resume_command_for_history_session() {
         command.args,
         vec![
             "exec",
+            "--cd",
+            "C:/work/project",
             "resume",
             "--skip-git-repo-check",
-            "019e8268-8f45-7422-aff8-5524d4c6990b",
-            "-"
+            "019e8268-8f45-7422-aff8-5524d4c6990b"
         ]
     );
 }

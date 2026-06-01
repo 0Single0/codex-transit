@@ -13,7 +13,7 @@ use crate::{
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
     file_watcher::FileChange,
     protocol::RealtimeEvent,
-    session_trace::{append_trace_line, ensure_trace_console, maybe_open_trace_console},
+    session_trace::append_trace_line,
 };
 
 pub trait ManagedSessionProcess {
@@ -213,7 +213,6 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let Some(project_root) = self.projects.get(&context.project_id).cloned() else {
             bail!("project is not registered");
         };
-        let _ = ensure_trace_console(session_id);
         let resume_id = codex_session_id.or(context.codex_session_id);
         let _ = append_trace_line(session_id, &format!("USER> {text}"));
         let process_result = if let Some(resume_id) = resume_id {
@@ -284,9 +283,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             OutputStream::Stdout => "STDOUT>",
             OutputStream::Stderr => "STDERR>",
         };
-        if let Ok(log_path) = append_trace_line(output.session_id, &format!("{prefix} {}", output.text)) {
-            let _ = maybe_open_trace_console(output.session_id, &log_path);
-        }
+        let _ = append_trace_line(output.session_id, &format!("{prefix} {}", output.text));
         let event = self.output_to_event(output)?;
         self.outbound_tx.send(event).await?;
         Ok(())

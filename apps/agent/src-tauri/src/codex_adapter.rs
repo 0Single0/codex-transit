@@ -2,8 +2,8 @@ use std::{env, path::PathBuf};
 
 use anyhow::{Context, Result};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    process::{Child, ChildStdin, Command},
+    io::AsyncReadExt,
+    process::{Child, Command},
     sync::mpsc,
 };
 use uuid::Uuid;
@@ -25,7 +25,6 @@ pub enum OutputStream {
 
 pub struct CodexSessionProcess {
     child: Child,
-    stdin: ChildStdin,
 }
 
 pub struct CodexAdapter {
@@ -57,9 +56,31 @@ impl CodexAdapter {
         }
     }
 
-    pub fn build_exec_command(
+    pub fn build_exec_command(&self, working_dir: PathBuf, options: CodexExecOptions) -> CodexExecCommand {
+        let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
+        let mut args = vec![
+            "exec".to_string(),
+            "--cd".to_string(),
+            normalized_working_dir.to_string_lossy().replace('\\', "/"),
+        ];
+        if let Some(sandbox) = options.sandbox {
+            args.push("--sandbox".to_string());
+            args.push(sandbox);
+        }
+        if let Some(model) = options.model {
+            args.push("--model".to_string());
+            args.push(model);
+        }
+        CodexExecCommand {
+            program: self.command.clone(),
+            args,
+        }
+    }
+
+    pub fn build_resume_command(
         &self,
         working_dir: PathBuf,
+        codex_session_id: &str,
         options: CodexExecOptions,
     ) -> CodexExecCommand {
         let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
@@ -76,28 +97,14 @@ impl CodexAdapter {
             args.push("--model".to_string());
             args.push(model);
         }
-        args.push("-".to_string());
+        args.extend(vec![
+            "resume".to_string(),
+            "--skip-git-repo-check".to_string(),
+            codex_session_id.to_string(),
+        ]);
         CodexExecCommand {
             program: self.command.clone(),
             args,
-        }
-    }
-
-    pub fn build_resume_command(
-        &self,
-        _working_dir: PathBuf,
-        codex_session_id: &str,
-        _options: CodexExecOptions,
-    ) -> CodexExecCommand {
-        CodexExecCommand {
-            program: self.command.clone(),
-            args: vec![
-                "exec".to_string(),
-                "resume".to_string(),
-                "--skip-git-repo-check".to_string(),
-                codex_session_id.to_string(),
-                "-".to_string(),
-            ],
         }
     }
 
@@ -108,8 +115,9 @@ impl CodexAdapter {
         prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
-        let exec = self.build_exec_command(working_dir.clone(), CodexExecOptions::default());
-        self.spawn_command(session_id, working_dir, exec, prompt, output_tx)
+        let mut exec = self.build_exec_command(working_dir.clone(), CodexExecOptions::default());
+        exec.args.push(prompt);
+        self.spawn_command(session_id, working_dir, exec, output_tx)
             .await
     }
 
@@ -121,12 +129,13 @@ impl CodexAdapter {
         prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
-        let exec = self.build_resume_command(
+        let mut exec = self.build_resume_command(
             working_dir.clone(),
             &codex_session_id,
             CodexExecOptions::default(),
         );
-        self.spawn_command(session_id, working_dir, exec, prompt, output_tx)
+        exec.args.push(prompt);
+        self.spawn_command(session_id, working_dir, exec, output_tx)
             .await
     }
 
@@ -135,24 +144,24 @@ impl CodexAdapter {
         session_id: Uuid,
         working_dir: PathBuf,
         exec: CodexExecCommand,
-        prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
+        if cfg!(windows) && env::var("CODEX_TRANSIT_OPEN_CODEX_WINDOW").unwrap_or_else(|_| "1".to_string()) != "0" {
+            return self
+                .spawn_windows_visible_codex(session_id, working_dir, exec, output_tx)
+                .await;
+        }
+
         let working_dir = normalize_for_windows_process_path(&working_dir);
         let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
         let mut child = Command::new(&invocation.program)
             .args(&invocation.args)
             .current_dir(working_dir)
-            .stdin(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
             .with_context(|| format_spawn_error(&invocation))?;
-
-        let mut stdin = child.stdin.take().expect("child stdin should be piped");
-        stdin.write_all(prompt.as_bytes()).await?;
-        stdin.write_all(b"\n").await?;
-        stdin.shutdown().await?;
         if let Some(stdout) = child.stdout.take() {
             let tx = output_tx.clone();
             tokio::spawn(async move {
@@ -200,7 +209,103 @@ impl CodexAdapter {
             });
         }
 
-        Ok(CodexSessionProcess { child, stdin })
+        Ok(CodexSessionProcess { child })
+    }
+
+    #[cfg(windows)]
+    async fn spawn_windows_visible_codex(
+        &self,
+        session_id: Uuid,
+        working_dir: PathBuf,
+        exec: CodexExecCommand,
+        output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<CodexSessionProcess> {
+        use tokio::fs::OpenOptions as TokioOpenOptions;
+        use tokio::io::{AsyncSeekExt, SeekFrom};
+
+        let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
+        let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
+        let log_path = crate::session_trace::ensure_session_log_file(session_id)?;
+        let log_path_str = log_path.to_string_lossy().replace('\'', "''");
+        let title = format!("Codex {}", session_id);
+        let script = format!(
+            "$ErrorActionPreference='Stop'; \
+$Host.UI.RawUI.WindowTitle='{title}'; \
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false); \
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); \
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'; \
+$enc = [System.Text.UTF8Encoding]::new($false); \
+[System.IO.File]::WriteAllText('{log_path_str}', '', $enc); \
+$cmd = @('{program}'{args}); \
+& $cmd[0] @($cmd[1..($cmd.Length-1)]) 2>&1 | Tee-Object -FilePath '{log_path_str}'; \
+if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
+            program = escape_ps_single_quoted(&invocation.program),
+            args = invocation
+                .args
+                .iter()
+                .map(|arg| format!(", '{}'", escape_ps_single_quoted(arg)))
+                .collect::<String>(),
+        );
+
+        let child = Command::new("powershell")
+            .arg("-NoLogo")
+            .arg("-NoExit")
+            .arg("-Command")
+            .arg(script)
+            .current_dir(normalized_working_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .with_context(|| format_spawn_error(&invocation))?;
+
+        let tx = output_tx.clone();
+        let mut reader = TokioOpenOptions::new().read(true).open(&log_path).await?;
+        tokio::spawn(async move {
+            let mut position: u64 = 0;
+            let mut idle_ticks: u16 = 0;
+            loop {
+                let mut buffer = vec![0_u8; 4096];
+                if reader.seek(SeekFrom::Start(position)).await.is_err() {
+                    break;
+                }
+                match reader.read(&mut buffer).await {
+                    Ok(0) => {
+                        idle_ticks = idle_ticks.saturating_add(1);
+                        if idle_ticks > 6000 {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+                    }
+                    Ok(read) => {
+                        idle_ticks = 0;
+                        position += read as u64;
+                        let text = String::from_utf8_lossy(&buffer[..read]).to_string();
+                        let _ = tx
+                            .send(ProcessOutput {
+                                session_id,
+                                stream: OutputStream::Stdout,
+                                text,
+                            })
+                            .await;
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        Ok(CodexSessionProcess { child })
+    }
+
+    #[cfg(not(windows))]
+    async fn spawn_windows_visible_codex(
+        &self,
+        _session_id: Uuid,
+        _working_dir: PathBuf,
+        _exec: CodexExecCommand,
+        _output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<CodexSessionProcess> {
+        unreachable!()
     }
 }
 
@@ -317,6 +422,11 @@ pub fn format_spawn_error(invocation: &ProcessInvocation) -> String {
     )
 }
 
+#[cfg(windows)]
+fn escape_ps_single_quoted(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
 pub fn format_error_chain(error: &anyhow::Error) -> String {
     let mut parts = vec![error.to_string()];
     for cause in error.chain().skip(1) {
@@ -336,9 +446,7 @@ pub fn describe_invocation(invocation: &ProcessInvocation, cwd: &std::path::Path
 
 impl CodexSessionProcess {
     pub async fn send_input(&mut self, text: &str) -> Result<()> {
-        self.stdin.write_all(text.as_bytes()).await?;
-        self.stdin.write_all(b"\n").await?;
-        self.stdin.flush().await?;
+        let _ = text;
         Ok(())
     }
 
