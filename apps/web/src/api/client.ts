@@ -104,7 +104,16 @@ export class ApiClient {
         ...init.headers
       }
     });
-    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    if (!response.ok) {
+      let message = `Request failed: ${response.status}`;
+      try {
+        const body = (await response.json()) as { error?: string; issues?: Array<{ message?: string }> };
+        message = body.issues?.[0]?.message ?? body.error ?? message;
+      } catch {
+        // Keep the generic HTTP status message when the response body is not JSON.
+      }
+      throw new Error(message);
+    }
     return response.json();
   }
 }

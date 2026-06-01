@@ -143,4 +143,15 @@ describe("ApiClient", () => {
       }
     });
   });
+
+  it("throws server validation messages from failed requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () => Promise.resolve({ error: "validation_error", issues: [{ message: "Password is too short" }] })
+    });
+    const api = new ApiClient(null, fetchMock as never);
+
+    await expect(api.register("new@example.com", "123")).rejects.toThrow("Password is too short");
+  });
 });

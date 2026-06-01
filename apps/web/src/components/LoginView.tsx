@@ -14,6 +14,10 @@ export function LoginView(props: {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (password.length < 8) {
+      setError(props.labels.passwordHint);
+      return;
+    }
     try {
       if (mode === "login") {
         await props.onLogin(email, password);
@@ -35,6 +39,7 @@ export function LoginView(props: {
         {props.labels.password}
         <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
       </label>
+      <p className="hint">{props.labels.passwordHint}</p>
       {error ? <p className="error">{error}</p> : null}
       <div className="actions">
         <button type="submit">{mode === "login" ? props.labels.login : props.labels.register}</button>

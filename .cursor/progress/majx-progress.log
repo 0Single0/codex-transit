@@ -373,3 +373,18 @@
   - apps/web/src/pairing.test.ts：覆盖 Agent 登录二维码解析
   - apps/web/src/components/DeviceListView.tsx：简化为已绑定设备列表
   - apps/web/src/i18n.ts、apps/web/src/styles.css：更新扫码和底部导航文案样式
+
+[2026-06-01]
+用户输入：注册账号注册失败
+完成：注册失败原因修复与提示优化 (majx)
+  - 修复 Zod 请求校验错误被服务端返回 500 的问题，改为 400 validation_error
+  - 前端注册/登录表单增加密码至少 8 位本地提示和拦截
+  - API 客户端读取后端错误信息，避免只显示泛化失败
+
+涉及文件：
+  - apps/server/src/app.ts：新增 ZodError 全局错误处理
+  - apps/server/test/app-error.test.ts：覆盖短密码注册返回 400
+  - apps/web/src/components/LoginView.tsx：增加密码长度校验和提示
+  - apps/web/src/i18n.ts：新增密码长度提示文案
+  - apps/web/src/api/client.ts：透传服务端错误消息
+  - apps/web/src/api/client.test.ts：覆盖失败请求错误信息
