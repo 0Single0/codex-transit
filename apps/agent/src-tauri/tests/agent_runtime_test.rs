@@ -2,7 +2,7 @@ use anyhow::Result;
 use codex_transit_agent::{
     agent_runtime::{
         dispatch_event, forward_next_outbound_event, handle_next_inbound_event,
-        pump_next_file_change, pump_next_process_output,
+        pump_next_file_change, pump_next_process_output, run_agent_once,
     },
     codex_adapter::{OutputStream, ProcessOutput},
     protocol::RealtimeEvent,
@@ -238,4 +238,60 @@ async fn forwards_next_outbound_event_to_realtime_channel() {
         event,
         RealtimeEvent::CodexOutputChunk { text, .. } if text == "streamed"
     ));
+}
+
+#[tokio::test]
+async fn run_agent_once_processes_ready_inbound_event() {
+    let runner = RuntimeRunner::default();
+    let inputs = runner.inputs.clone();
+    let mut manager = SessionManager::new(runner);
+    let (inbound_tx, inbound_rx) = mpsc::channel(8);
+    let (outbound_tx, _outbound_rx) = mpsc::channel(8);
+    let (_watch_tx, watch_rx) = mpsc::channel(8);
+    let session_id = "00000000-0000-4000-8000-000000000005".parse().unwrap();
+    let project_id = "00000000-0000-4000-8000-000000000004".parse().unwrap();
+    let project_root = PathBuf::from("C:/projects/demo");
+
+    manager.register_project(project_id, project_root.clone());
+    inbound_tx
+        .send(session_start_event(project_id, session_id))
+        .await
+        .unwrap();
+    inbound_tx
+        .send(RealtimeEvent::SessionInput {
+            event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
+            timestamp: "2026-06-01T00:00:01.000Z".to_string(),
+            user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
+            device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
+            project_id,
+            session_id,
+            text: "looped".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let mut inbound_rx = inbound_rx;
+    let mut watch_rx = watch_rx;
+    assert!(run_agent_once(
+        &mut manager,
+        &mut inbound_rx,
+        &outbound_tx,
+        &mut watch_rx,
+        project_id,
+        &project_root,
+    )
+    .await
+    .unwrap());
+    assert!(run_agent_once(
+        &mut manager,
+        &mut inbound_rx,
+        &outbound_tx,
+        &mut watch_rx,
+        project_id,
+        &project_root,
+    )
+    .await
+    .unwrap());
+
+    assert_eq!(inputs.lock().unwrap().clone(), vec!["looped".to_string()]);
 }

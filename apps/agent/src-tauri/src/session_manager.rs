@@ -176,12 +176,24 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         self.outbound_rx.recv().await
     }
 
+    pub fn try_next_outbound_event(&mut self) -> Option<RealtimeEvent> {
+        self.outbound_rx.try_recv().ok()
+    }
+
     pub async fn pump_process_output_once(&mut self) -> Result<bool> {
         let Some(output) = self.output_rx.recv().await else {
             return Ok(false);
         };
         self.record_process_output(output).await?;
         Ok(true)
+    }
+
+    pub async fn next_process_output(&mut self) -> Option<ProcessOutput> {
+        self.output_rx.recv().await
+    }
+
+    pub fn try_next_process_output(&mut self) -> Option<ProcessOutput> {
+        self.output_rx.try_recv().ok()
     }
 
     pub async fn record_file_change(&mut self, change: FileChange) -> Result<()> {
