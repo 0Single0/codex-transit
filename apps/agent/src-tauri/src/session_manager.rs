@@ -23,6 +23,7 @@ pub trait SessionProcessRunner {
         &self,
         session_id: Uuid,
         working_dir: PathBuf,
+        prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> impl std::future::Future<Output = Result<Self::Process>> + Send;
 }
@@ -142,24 +143,33 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let Some(project_root) = self.projects.get(&context.project_id).cloned() else {
             bail!("project is not registered");
         };
-        let process = self
-            .runner
-            .start_session(session_id, project_root, self.output_tx.clone())
-            .await?;
-        self.sessions.insert(session_id, process);
         self.contexts.insert(session_id, context);
         self.output_seq.insert(session_id, 0);
+        let _ = project_root;
         Ok(())
     }
 
     pub async fn send_input(&mut self, session_id: Uuid, text: String) -> Result<()> {
-        let Some(process) = self.sessions.get_mut(&session_id) else {
+        let Some(context) = self.contexts.get(&session_id).cloned() else {
             bail!("session is not running");
         };
-        process.send_input(&text).await
+        let Some(project_root) = self.projects.get(&context.project_id).cloned() else {
+            bail!("project is not registered");
+        };
+        if let Some(process) = self.sessions.get_mut(&session_id) {
+            return process.send_input(&text).await;
+        }
+        let process = self
+            .runner
+            .start_session(session_id, project_root, text, self.output_tx.clone())
+            .await?;
+        self.sessions.insert(session_id, process);
+        Ok(())
     }
 
     pub async fn stop_session(&mut self, session_id: Uuid) -> Result<()> {
+        self.contexts.remove(&session_id);
+        self.output_seq.remove(&session_id);
         let Some(mut process) = self.sessions.remove(&session_id) else {
             return Ok(());
         };
@@ -299,9 +309,10 @@ impl SessionProcessRunner for CodexAdapter {
         &self,
         session_id: Uuid,
         working_dir: PathBuf,
+        prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
-        self.start(session_id, working_dir, output_tx).await
+        self.start(session_id, working_dir, prompt, output_tx).await
     }
 }
 

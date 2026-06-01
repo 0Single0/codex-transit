@@ -23,6 +23,7 @@ const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000004";
 #[derive(Default, Clone)]
 struct RunnerState {
     started_dirs: Vec<PathBuf>,
+    started_prompts: Vec<String>,
     inputs: HashMap<Uuid, Vec<String>>,
     stopped: Vec<Uuid>,
 }
@@ -49,9 +50,13 @@ impl SessionProcessRunner for FakeRunner {
         &self,
         session_id: Uuid,
         working_dir: PathBuf,
+        prompt: String,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
-        self.state.lock().unwrap().started_dirs.push(working_dir);
+        let mut state = self.state.lock().unwrap();
+        state.started_dirs.push(working_dir);
+        state.started_prompts.push(prompt);
+        drop(state);
         Ok(FakeProcess {
             session_id,
             state: self.state.clone(),
@@ -123,7 +128,7 @@ async fn rejects_input_for_missing_session() {
 }
 
 #[tokio::test]
-async fn starts_session_for_registered_project_root() {
+async fn session_start_registers_context_without_spawning_codex() {
     let runner = FakeRunner::default();
     let state = runner.state.clone();
     let mut manager = SessionManager::new(runner);
@@ -134,11 +139,11 @@ async fn starts_session_for_registered_project_root() {
     manager.register_project(project_id, project_root.clone());
     manager.start_session(session_id, project_id).await.unwrap();
 
-    assert_eq!(state.lock().unwrap().started_dirs, vec![project_root]);
+    assert!(state.lock().unwrap().started_dirs.is_empty());
 }
 
 #[tokio::test]
-async fn forwards_input_to_started_session() {
+async fn starts_codex_with_first_input_prompt() {
     let runner = FakeRunner::default();
     let state = runner.state.clone();
     let mut manager = SessionManager::new(runner);
@@ -152,16 +157,9 @@ async fn forwards_input_to_started_session() {
         .await
         .unwrap();
 
-    assert_eq!(
-        state
-            .lock()
-            .unwrap()
-            .inputs
-            .get(&session_id)
-            .cloned()
-            .unwrap(),
-        vec!["hello".to_string()]
-    );
+    let state = state.lock().unwrap();
+    assert_eq!(state.started_dirs, vec![PathBuf::from("C:/projects/demo")]);
+    assert_eq!(state.started_prompts, vec!["hello".to_string()]);
 }
 
 #[tokio::test]
@@ -190,13 +188,7 @@ async fn handles_start_and_input_events() {
         .unwrap();
 
     assert_eq!(
-        state
-            .lock()
-            .unwrap()
-            .inputs
-            .get(&session_id)
-            .cloned()
-            .unwrap(),
+        state.lock().unwrap().started_prompts,
         vec!["implement it".to_string()]
     );
 }
@@ -294,6 +286,10 @@ async fn stop_event_stops_and_removes_running_session() {
 
     manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
     manager.start_session(session_id, project_id).await.unwrap();
+    manager
+        .send_input(session_id, "run before stop".to_string())
+        .await
+        .unwrap();
     manager
         .handle_event(RealtimeEvent::SessionStop {
             event_id: "00000000-0000-4000-8000-000000000012".parse().unwrap(),

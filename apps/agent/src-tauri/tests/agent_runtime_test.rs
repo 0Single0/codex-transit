@@ -20,6 +20,7 @@ use uuid::Uuid;
 #[derive(Default, Clone)]
 struct RuntimeRunner {
     inputs: Arc<Mutex<Vec<String>>>,
+    prompts: Arc<Mutex<Vec<String>>>,
     output_txs: Arc<Mutex<Vec<mpsc::Sender<ProcessOutput>>>>,
 }
 
@@ -34,8 +35,10 @@ impl SessionProcessRunner for RuntimeRunner {
         &self,
         _session_id: Uuid,
         _working_dir: PathBuf,
+        prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
+        self.prompts.lock().unwrap().push(prompt);
         self.output_txs.lock().unwrap().push(output_tx);
         Ok(RuntimeProcess {
             inputs: self.inputs.clone(),
@@ -54,6 +57,10 @@ async fn pumps_process_output_into_outbound_events() {
     manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
     manager
         .handle_event(session_start_event(project_id, session_id))
+        .await
+        .unwrap();
+    manager
+        .handle_event(session_input_event(project_id, session_id, "run"))
         .await
         .unwrap();
     let output_tx = output_txs.lock().unwrap().first().unwrap().clone();
@@ -201,10 +208,22 @@ fn session_start_event(project_id: Uuid, session_id: Uuid) -> RealtimeEvent {
     }
 }
 
+fn session_input_event(project_id: Uuid, session_id: Uuid, text: &str) -> RealtimeEvent {
+    RealtimeEvent::SessionInput {
+        event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
+        timestamp: "2026-06-01T00:00:01.000Z".to_string(),
+        user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
+        device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
+        project_id,
+        session_id,
+        text: text.to_string(),
+    }
+}
+
 #[tokio::test]
 async fn dispatches_realtime_events_to_session_manager() {
     let runner = RuntimeRunner::default();
-    let inputs = runner.inputs.clone();
+    let prompts = runner.prompts.clone();
     let mut manager = SessionManager::new(runner);
     let session_id = "00000000-0000-4000-8000-000000000005".parse().unwrap();
     let project_id = "00000000-0000-4000-8000-000000000004".parse().unwrap();
@@ -217,26 +236,18 @@ async fn dispatches_realtime_events_to_session_manager() {
 
     dispatch_event(
         &mut manager,
-        RealtimeEvent::SessionInput {
-            event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
-            timestamp: "2026-06-01T00:00:01.000Z".to_string(),
-            user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
-            device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
-            project_id,
-            session_id,
-            text: "hello".to_string(),
-        },
+        session_input_event(project_id, session_id, "hello"),
     )
     .await
     .unwrap();
 
-    assert_eq!(inputs.lock().unwrap().clone(), vec!["hello".to_string()]);
+    assert_eq!(prompts.lock().unwrap().clone(), vec!["hello".to_string()]);
 }
 
 #[tokio::test]
 async fn handles_next_inbound_event_from_realtime_channel() {
     let runner = RuntimeRunner::default();
-    let inputs = runner.inputs.clone();
+    let prompts = runner.prompts.clone();
     let mut manager = SessionManager::new(runner);
     let (inbound_tx, inbound_rx) = mpsc::channel(8);
     let session_id = "00000000-0000-4000-8000-000000000005".parse().unwrap();
@@ -248,15 +259,7 @@ async fn handles_next_inbound_event_from_realtime_channel() {
         .await
         .unwrap();
     inbound_tx
-        .send(RealtimeEvent::SessionInput {
-            event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
-            timestamp: "2026-06-01T00:00:01.000Z".to_string(),
-            user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
-            device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
-            project_id,
-            session_id,
-            text: "from channel".to_string(),
-        })
+        .send(session_input_event(project_id, session_id, "from channel"))
         .await
         .unwrap();
 
@@ -269,7 +272,7 @@ async fn handles_next_inbound_event_from_realtime_channel() {
         .unwrap());
 
     assert_eq!(
-        inputs.lock().unwrap().clone(),
+        prompts.lock().unwrap().clone(),
         vec!["from channel".to_string()]
     );
 }
@@ -309,7 +312,7 @@ async fn forwards_next_outbound_event_to_realtime_channel() {
 #[tokio::test]
 async fn run_agent_once_processes_ready_inbound_event() {
     let runner = RuntimeRunner::default();
-    let inputs = runner.inputs.clone();
+    let prompts = runner.prompts.clone();
     let mut manager = SessionManager::new(runner);
     let (inbound_tx, inbound_rx) = mpsc::channel(8);
     let (outbound_tx, _outbound_rx) = mpsc::channel(8);
@@ -324,15 +327,7 @@ async fn run_agent_once_processes_ready_inbound_event() {
         .await
         .unwrap();
     inbound_tx
-        .send(RealtimeEvent::SessionInput {
-            event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
-            timestamp: "2026-06-01T00:00:01.000Z".to_string(),
-            user_id: "00000000-0000-4000-8000-000000000002".parse().unwrap(),
-            device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
-            project_id,
-            session_id,
-            text: "looped".to_string(),
-        })
+        .send(session_input_event(project_id, session_id, "looped"))
         .await
         .unwrap();
 
@@ -359,5 +354,5 @@ async fn run_agent_once_processes_ready_inbound_event() {
     .await
     .unwrap());
 
-    assert_eq!(inputs.lock().unwrap().clone(), vec!["looped".to_string()]);
+    assert_eq!(prompts.lock().unwrap().clone(), vec!["looped".to_string()]);
 }

@@ -78,6 +78,7 @@ impl CodexAdapter {
         &self,
         session_id: Uuid,
         working_dir: PathBuf,
+        prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
         let exec = self.build_exec_command(working_dir.clone(), CodexExecOptions::default());
@@ -89,7 +90,10 @@ impl CodexAdapter {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
-        let stdin = child.stdin.take().expect("child stdin should be piped");
+        let mut stdin = child.stdin.take().expect("child stdin should be piped");
+        stdin.write_all(prompt.as_bytes()).await?;
+        stdin.write_all(b"\n").await?;
+        stdin.shutdown().await?;
         if let Some(stdout) = child.stdout.take() {
             let tx = output_tx.clone();
             tokio::spawn(async move {
