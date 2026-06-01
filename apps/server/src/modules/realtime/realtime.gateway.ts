@@ -1,6 +1,7 @@
 import { realtimeEventSchema } from "@codex-transit/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { verifySecret } from "../devices/device.service";
 import { ConnectionRegistry } from "./connection-registry";
 
 export const connectionRegistry = new ConnectionRegistry();
@@ -15,10 +16,16 @@ const querySchema = z.object({
 export async function registerRealtimeGateway(app: FastifyInstance) {
   app.get("/realtime", { websocket: true }, async (socket, request) => {
     const query = querySchema.parse(request.query);
-    const payload = app.jwt.verify<{ sub: string; email?: string }>(query.token);
+    let userId: string;
 
     if (query.role === "agent") {
       if (!query.deviceId) throw new Error("deviceId_required");
+      const device = await app.prisma.device.findUnique({ where: { id: query.deviceId } });
+      if (!device?.tokenHash || !verifySecret(device.tokenHash, query.token)) {
+        socket.close(1008, "invalid_device_token");
+        return;
+      }
+      userId = device.userId;
       connectionRegistry.addAgent(query.deviceId, socket);
       await app.prisma.device.update({
         where: { id: query.deviceId },
@@ -34,6 +41,8 @@ export async function registerRealtimeGateway(app: FastifyInstance) {
     }
 
     if (query.role === "viewer") {
+      const payload = app.jwt.verify<{ sub: string; email?: string }>(query.token);
+      userId = payload.sub;
       if (!query.sessionId) throw new Error("sessionId_required");
       connectionRegistry.addViewer(query.sessionId, socket);
       socket.on("close", () => connectionRegistry.removeViewer(query.sessionId!, socket));
@@ -63,6 +72,6 @@ export async function registerRealtimeGateway(app: FastifyInstance) {
       }
     });
 
-    socket.send(JSON.stringify({ type: "connected", userId: payload.sub }));
+    socket.send(JSON.stringify({ type: "connected", userId: userId! }));
   });
 }
