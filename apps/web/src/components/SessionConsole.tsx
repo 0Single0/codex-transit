@@ -1,4 +1,9 @@
-import type { FileChangeHistory, RealtimeEvent, TerminalOutputChunk } from "@codex-transit/shared";
+import type {
+  FileChangeHistory,
+  RealtimeEvent,
+  SessionMessage,
+  TerminalOutputChunk
+} from "@codex-transit/shared";
 import { useEffect, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
 
@@ -7,6 +12,7 @@ export function SessionConsole(props: {
   sessionId: string;
   loadOutput: () => Promise<TerminalOutputChunk[]>;
   loadFileChanges: () => Promise<FileChangeHistory[]>;
+  loadMessages: () => Promise<SessionMessage[]>;
   onSend: (text: string) => Promise<void>;
   onStart: () => Promise<void>;
   onStop: () => Promise<void>;
@@ -14,15 +20,19 @@ export function SessionConsole(props: {
 }) {
   const [lines, setLines] = useState<string[]>([]);
   const [files, setFiles] = useState<string[]>([]);
+  const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [prompt, setPrompt] = useState("");
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([props.loadOutput(), props.loadFileChanges()]).then(([output, changes]) => {
-      if (!mounted) return;
-      setLines(output.map((chunk) => chunk.text));
-      setFiles(Array.from(new Set(changes.map((change) => change.relativePath))));
-    });
+    void Promise.all([props.loadOutput(), props.loadFileChanges(), props.loadMessages()]).then(
+      ([output, changes, messages]) => {
+        if (!mounted) return;
+        setLines(output.map((chunk) => chunk.text));
+        setFiles(Array.from(new Set(changes.map((change) => change.relativePath))));
+        setMessages(messages);
+      }
+    );
 
     const closeStream = connectSessionStream({
       token: props.token,
@@ -44,13 +54,28 @@ export function SessionConsole(props: {
 
   return (
     <section className="console-grid">
+      <section className="panel stack">
+        <h2>Conversation</h2>
+        {messages.length ? (
+          messages.map((message, index) => (
+            <p className="message-row" key={message.id ?? index}>
+              <strong>{message.role}</strong>
+              <span>{message.text}</span>
+            </p>
+          ))
+        ) : (
+          <p className="empty-state">No prompts have been sent in this session.</p>
+        )}
+      </section>
       <pre className="console">{lines.join("\n")}</pre>
       <form
         className="panel stack"
         onSubmit={async (event) => {
           event.preventDefault();
           if (!prompt.trim()) return;
-          await props.onSend(prompt);
+          const text = prompt;
+          await props.onSend(text);
+          setMessages((current) => [...current, { role: "user", text }]);
           setPrompt("");
         }}
       >

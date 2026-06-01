@@ -142,3 +142,19 @@ button {
   font-size: 1.35rem;
   letter-spacing: 0;
 }
+
+.message-row {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  border: 1px solid #d9e1e5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.message-row strong {
+  color: #5f6f78;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}

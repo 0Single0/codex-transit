@@ -93,6 +93,7 @@ export function App() {
           token={token}
           sessionId={selectedSessionId}
           loadFileChanges={() => api.sessionFileChanges(selectedSessionId)}
+          loadMessages={() => api.sessionMessages(selectedSessionId)}
           loadOutput={() => api.sessionOutput(selectedSessionId)}
           onSend={(text) => api.sendSessionInput(selectedSessionId, text).then(() => undefined)}
           onStart={() => api.startSession(selectedSessionId).then(() => undefined)}

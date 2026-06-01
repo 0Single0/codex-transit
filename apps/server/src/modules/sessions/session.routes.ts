@@ -48,6 +48,15 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get("/sessions/:sessionId/messages", async (request) => {
+    const user = await requireUser(request);
+    const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
+    return app.prisma.sessionMessage.findMany({
+      where: { session: { id: params.sessionId, userId: user.id } },
+      orderBy: { createdAt: "asc" }
+    });
+  });
+
   app.post("/sessions/:sessionId/start", async (request, reply) => {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);

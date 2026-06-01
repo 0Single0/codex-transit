@@ -66,6 +66,14 @@ export const fileChangeHistorySchema = z.object({
   createdAt: z.string().datetime().optional()
 });
 
+export const sessionMessageSchema = z.object({
+  id: uuidSchema.optional(),
+  sessionId: uuidSchema.optional(),
+  role: z.string().min(1),
+  text: z.string(),
+  createdAt: z.string().datetime().optional()
+});
+
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type DeviceSummary = z.infer<typeof deviceSummarySchema>;
@@ -75,3 +83,4 @@ export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type DeviceProjectsResponse = z.infer<typeof deviceProjectsResponseSchema>;
 export type TerminalOutputChunk = z.infer<typeof terminalOutputChunkSchema>;
 export type FileChangeHistory = z.infer<typeof fileChangeHistorySchema>;
+export type SessionMessage = z.infer<typeof sessionMessageSchema>;

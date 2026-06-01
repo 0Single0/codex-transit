@@ -4,6 +4,7 @@ import type {
   DeviceSummary,
   FileChangeHistory,
   LoginResponse,
+  SessionMessage,
   SessionSummary,
   TerminalOutputChunk
 } from "@codex-transit/shared";
@@ -41,6 +42,10 @@ export class ApiClient {
 
   async sessionFileChanges(sessionId: string): Promise<FileChangeHistory[]> {
     return this.request(`/sessions/${sessionId}/file-changes`);
+  }
+
+  async sessionMessages(sessionId: string): Promise<SessionMessage[]> {
+    return this.request(`/sessions/${sessionId}/messages`);
   }
 
   async deviceProjects(deviceId: string): Promise<DeviceProjectsResponse> {

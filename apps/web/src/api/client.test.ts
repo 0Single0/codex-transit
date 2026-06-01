@@ -89,4 +89,21 @@ describe("ApiClient", () => {
       }
     });
   });
+
+  it("loads session message history", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{ role: "user", text: "make a change" }])
+    });
+    const api = new ApiClient("token", fetchMock as never);
+
+    await api.sessionMessages("session-1");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/sessions/session-1/messages", {
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
 });
