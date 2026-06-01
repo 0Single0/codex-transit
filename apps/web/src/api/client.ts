@@ -24,6 +24,13 @@ export class ApiClient {
     });
   }
 
+  async register(email: string, password: string): Promise<LoginResponse> {
+    return this.request("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    });
+  }
+
   async devices(): Promise<DeviceSummary[]> {
     return this.request("/devices");
   }

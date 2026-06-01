@@ -1,7 +1,9 @@
 import type { ProjectSummary, SessionSummary } from "@codex-transit/shared";
 import { FormEvent, useState } from "react";
+import type { WebMessages } from "../i18n";
 
 export function SessionListView(props: {
+  labels: WebMessages;
   project: ProjectSummary;
   sessions: SessionSummary[];
   onBack: () => void;
@@ -20,13 +22,13 @@ export function SessionListView(props: {
   return (
     <section className="stack">
       <button className="secondary" onClick={props.onBack}>
-        Back to projects
+        {props.labels.backToProjects}
       </button>
       <div className="panel stack">
         <h2>{props.project.displayName}</h2>
         <form className="stack" onSubmit={submit}>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="New session title" />
-          <button type="submit">New session</button>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={props.labels.newSessionTitle} />
+          <button type="submit">{props.labels.newSession}</button>
         </form>
       </div>
       {props.sessions.map((session) => (

@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createAgentApi, ProjectEntry } from "./agentApi";
+import { Locale, messages } from "./i18n";
 
 export function App() {
   const api = useMemo(() => createAgentApi(), []);
+  const [locale, setLocale] = useState<Locale>((localStorage.getItem("agent-locale") as Locale | null) ?? "zh");
   const [serverUrl, setServerUrl] = useState("");
   const [deviceId, setDeviceId] = useState("");
   const [deviceToken, setDeviceToken] = useState("");
@@ -18,6 +20,12 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
 
   const configured = Boolean(serverUrl && deviceId && deviceToken);
+  const labels = messages[locale];
+
+  function changeLocale(nextLocale: Locale) {
+    localStorage.setItem("agent-locale", nextLocale);
+    setLocale(nextLocale);
+  }
 
   useEffect(() => {
     void loadInitialState();
@@ -53,7 +61,7 @@ export function App() {
     setMessage(null);
     try {
       await api.saveSettings({ serverUrl, deviceId, deviceToken });
-      setMessage("Connection settings saved.");
+      setMessage(labels.settingsSaved);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -76,7 +84,7 @@ export function App() {
       setDeviceId(settings.deviceId);
       setDeviceToken(settings.deviceToken);
       setBindCode("");
-      setMessage("Device paired and connection settings saved.");
+      setMessage(labels.paired);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -95,7 +103,7 @@ export function App() {
       const project = await api.addProject(trimmedPath);
       setProjects((current) => [project, ...current]);
       setProjectPath("");
-      setMessage("Project added.");
+      setMessage(labels.projectAdded);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -109,7 +117,7 @@ export function App() {
     setMessage(null);
     try {
       await api.syncProjectsNow();
-      setMessage("Projects synced to the relay server.");
+      setMessage(labels.projectsSynced);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -124,7 +132,7 @@ export function App() {
     try {
       const status = await api.startRuntime();
       setRuntimeRunning(status.running);
-      setMessage("Agent runtime started.");
+      setMessage(labels.runtimeStarted);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -139,7 +147,7 @@ export function App() {
     try {
       const status = await api.stopRuntime();
       setRuntimeRunning(status.running);
-      setMessage("Agent runtime stopped.");
+      setMessage(labels.runtimeStopped);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -153,41 +161,50 @@ export function App() {
         <header className="top-bar">
           <div>
             <p className="eyebrow">Codex Transit Agent</p>
-            <h1>Desktop bridge</h1>
+            <h1>{labels.title}</h1>
           </div>
-          <span className={configured ? "status-pill ready" : "status-pill"}>
-            {runtimeRunning ? "Connected" : configured ? "Configured" : "Needs setup"}
-          </span>
+          <div className="actions">
+            <label className="language-select">
+              {labels.language}
+              <select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>
+                <option value="zh">{labels.chinese}</option>
+                <option value="en">{labels.english}</option>
+              </select>
+            </label>
+            <span className={configured ? "status-pill ready" : "status-pill"}>
+              {runtimeRunning ? labels.connected : configured ? labels.configured : labels.needsSetup}
+            </span>
+          </div>
         </header>
 
         <div className="layout-grid">
           <section className="panel" aria-labelledby="settings-title">
-            <h2 id="settings-title">Relay connection</h2>
+            <h2 id="settings-title">{labels.relayConnection}</h2>
             <form className="form-grid" onSubmit={bindDevice}>
               <label>
-                Pairing code
+                {labels.pairingCode}
                 <input
                   value={bindCode}
                   onChange={(event) => setBindCode(event.target.value)}
-                  placeholder="code from phone"
+                  placeholder={labels.pairingPlaceholder}
                 />
               </label>
               <label>
-                Device name
+                {labels.deviceName}
                 <input
                   value={deviceName}
                   onChange={(event) => setDeviceName(event.target.value)}
-                  placeholder="Workstation"
+                  placeholder={labels.deviceNamePlaceholder}
                 />
               </label>
               <button disabled={busy || !serverUrl || !bindCode || !deviceName} type="submit">
-                Pair this computer
+                {labels.pairComputer}
               </button>
             </form>
-            <p className="hint">Manual credentials remain available for local development.</p>
+            <p className="hint">{labels.manualHint}</p>
             <form className="form-grid" onSubmit={saveSettings}>
               <label>
-                Server URL
+                {labels.serverUrl}
                 <input
                   value={serverUrl}
                   onChange={(event) => setServerUrl(event.target.value)}
@@ -196,7 +213,7 @@ export function App() {
                 />
               </label>
               <label>
-                Device ID
+                {labels.deviceId}
                 <input
                   value={deviceId}
                   onChange={(event) => setDeviceId(event.target.value)}
@@ -205,7 +222,7 @@ export function App() {
                 />
               </label>
               <label>
-                Device token
+                {labels.deviceToken}
                 <input
                   value={deviceToken}
                   onChange={(event) => setDeviceToken(event.target.value)}
@@ -216,10 +233,10 @@ export function App() {
               </label>
               <div className="actions">
                 <button disabled={busy} type="submit">
-                  Save
+                  {labels.save}
                 </button>
                 <button className="secondary" disabled={busy || !configured} onClick={syncProjects} type="button">
-                  Sync projects
+                  {labels.syncProjects}
                 </button>
                 <button
                   className="secondary"
@@ -227,7 +244,7 @@ export function App() {
                   onClick={startRuntime}
                   type="button"
                 >
-                  Start bridge
+                  {labels.startBridge}
                 </button>
                 <button
                   className="secondary"
@@ -235,17 +252,17 @@ export function App() {
                   onClick={stopRuntime}
                   type="button"
                 >
-                  Stop bridge
+                  {labels.stopBridge}
                 </button>
               </div>
             </form>
           </section>
 
           <section className="panel" aria-labelledby="project-title">
-            <h2 id="project-title">Local projects</h2>
+            <h2 id="project-title">{labels.localProjects}</h2>
             <form className="form-grid" onSubmit={addProject}>
               <label>
-                Project directory
+                {labels.projectDirectory}
                 <input
                   value={projectPath}
                   onChange={(event) => setProjectPath(event.target.value)}
@@ -253,7 +270,7 @@ export function App() {
                 />
               </label>
               <button disabled={busy || !projectPath.trim()} type="submit">
-                Add project
+                {labels.addProject}
               </button>
             </form>
             {projects.length ? (
@@ -266,7 +283,7 @@ export function App() {
                 ))}
               </ul>
             ) : (
-              <p className="empty-state">No local project directories have been added.</p>
+              <p className="empty-state">{labels.noProjects}</p>
             )}
           </section>
         </div>

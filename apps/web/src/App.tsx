@@ -6,8 +6,10 @@ import { LoginView } from "./components/LoginView";
 import { ProjectListView } from "./components/ProjectListView";
 import { SessionConsole } from "./components/SessionConsole";
 import { SessionListView } from "./components/SessionListView";
+import { Locale, messages } from "./i18n";
 
 export function App() {
+  const [locale, setLocale] = useState<Locale>((localStorage.getItem("locale") as Locale | null) ?? "zh");
   const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<DeviceSummary | null>(null);
@@ -17,9 +19,23 @@ export function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [bindCode, setBindCode] = useState<{ code: string; expiresAt: string } | null>(null);
   const api = useMemo(() => new ApiClient(token), [token]);
+  const labels = messages[locale];
+
+  function changeLocale(nextLocale: Locale) {
+    localStorage.setItem("locale", nextLocale);
+    setLocale(nextLocale);
+  }
 
   async function login(email: string, password: string) {
     const result = await api.login(email, password);
+    localStorage.setItem("token", result.token);
+    setToken(result.token);
+    const deviceList = await new ApiClient(result.token).devices();
+    setDevices(deviceList);
+  }
+
+  async function register(email: string, password: string) {
+    const result = await api.register(email, password);
     localStorage.setItem("token", result.token);
     setToken(result.token);
     const deviceList = await new ApiClient(result.token).devices();
@@ -58,22 +74,33 @@ export function App() {
       <header className="top-bar">
         <div>
           <p className="eyebrow">Codex Transit</p>
-          <h1>Remote sessions</h1>
+          <h1>{labels.appTitle}</h1>
         </div>
-        {token ? <button onClick={refreshDevices}>Refresh</button> : null}
+        <div className="actions">
+          <label className="language-select">
+            {labels.language}
+            <select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>
+              <option value="zh">{labels.chinese}</option>
+              <option value="en">{labels.english}</option>
+            </select>
+          </label>
+          {token ? <button onClick={refreshDevices}>{labels.refresh}</button> : null}
+        </div>
       </header>
 
-      {!token ? <LoginView onLogin={login} /> : null}
+      {!token ? <LoginView labels={labels} onLogin={login} onRegister={register} /> : null}
       {token && !selectedDevice && !selectedSessionId ? (
         <DeviceListView
           bindCode={bindCode}
           devices={devices}
+          labels={labels}
           onCreateBindCode={createBindCode}
           onSelect={selectDevice}
         />
       ) : null}
       {token && selectedDevice && !selectedProject && !selectedSessionId ? (
         <ProjectListView
+          labels={labels}
           projects={projects}
           onBack={() => setSelectedDevice(null)}
           onSelect={selectProject}
@@ -81,6 +108,7 @@ export function App() {
       ) : null}
       {token && selectedProject && !selectedSessionId ? (
         <SessionListView
+          labels={labels}
           project={selectedProject}
           sessions={sessions}
           onBack={() => setSelectedProject(null)}
@@ -90,6 +118,7 @@ export function App() {
       ) : null}
       {token && selectedSessionId ? (
         <SessionConsole
+          labels={labels}
           token={token}
           sessionId={selectedSessionId}
           loadFileChanges={() => api.sessionFileChanges(selectedSessionId)}

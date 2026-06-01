@@ -6,8 +6,10 @@ import type {
 } from "@codex-transit/shared";
 import { useEffect, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
+import type { WebMessages } from "../i18n";
 
 export function SessionConsole(props: {
+  labels: WebMessages;
   token: string;
   sessionId: string;
   loadOutput: () => Promise<TerminalOutputChunk[]>;
@@ -55,7 +57,7 @@ export function SessionConsole(props: {
   return (
     <section className="console-grid">
       <section className="panel stack">
-        <h2>Conversation</h2>
+        <h2>{props.labels.conversation}</h2>
         {messages.length ? (
           messages.map((message, index) => (
             <p className="message-row" key={message.id ?? index}>
@@ -64,7 +66,7 @@ export function SessionConsole(props: {
             </p>
           ))
         ) : (
-          <p className="empty-state">No prompts have been sent in this session.</p>
+          <p className="empty-state">{props.labels.noPrompts}</p>
         )}
       </section>
       <pre className="console">{lines.join("\n")}</pre>
@@ -80,16 +82,16 @@ export function SessionConsole(props: {
         }}
       >
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
-        <button type="submit">Send</button>
+        <button type="submit">{props.labels.send}</button>
         <button type="button" className="secondary" onClick={props.onStart}>
-          Start session
+          {props.labels.startSession}
         </button>
         <button type="button" className="secondary" onClick={props.onStop}>
-          Stop session
+          {props.labels.stopSession}
         </button>
       </form>
       <aside className="panel stack">
-        <h2>Changed files</h2>
+        <h2>{props.labels.changedFiles}</h2>
         {files.map((file) => (
           <button className="file-row" key={file} onClick={() => props.onRequestDiff(file)}>
             {file}

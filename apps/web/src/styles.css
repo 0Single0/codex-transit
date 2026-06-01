@@ -15,6 +15,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -65,6 +66,7 @@ label {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid #c9d4da;
@@ -125,6 +127,25 @@ button {
   color: #172026;
   background: #ffffff;
   border-color: #c9d4da;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.language-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+
+.language-select select {
+  min-width: 104px;
+  padding: 8px 10px;
 }
 
 .bind-code {

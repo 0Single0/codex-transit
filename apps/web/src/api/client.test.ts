@@ -56,6 +56,24 @@ describe("ApiClient", () => {
     });
   });
 
+  it("registers new users", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: "token", user: { id: "user-1", email: "new@example.com" } })
+    });
+    const api = new ApiClient(null, fetchMock as never);
+
+    await api.register("new@example.com", "password123");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email: "new@example.com", password: "password123" }),
+      headers: {
+        "content-type": "application/json"
+      }
+    });
+  });
+
   it("loads session output history", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

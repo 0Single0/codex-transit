@@ -18,6 +18,10 @@ input {
   font: inherit;
 }
 
+select {
+  font: inherit;
+}
+
 button {
   min-height: 38px;
   border: 1px solid #1d5f75;
@@ -39,6 +43,15 @@ input {
   border: 1px solid #c6c8bf;
   border-radius: 6px;
   padding: 10px 12px;
+  color: #192026;
+  background: #ffffff;
+}
+
+select {
+  min-height: 36px;
+  border: 1px solid #c6c8bf;
+  border-radius: 6px;
+  padding: 7px 10px;
   color: #192026;
   background: #ffffff;
 }
@@ -133,8 +146,16 @@ h2 {
 
 .actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.language-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
 }
 
 .secondary {
