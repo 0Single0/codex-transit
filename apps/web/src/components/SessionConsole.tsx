@@ -5,7 +5,7 @@ import { connectSessionStream } from "../api/realtime";
 import { buildConversationItems } from "../conversationItems";
 import type { WebMessages } from "../i18n";
 
-type PendingMessage = {
+type UserMessage = {
   id: string;
   role: "user";
   text: string;
@@ -29,7 +29,7 @@ export function SessionConsole(props: {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [isWaitingResponse, setIsWaitingResponse] = useState(false);
   const [lastSendAt, setLastSendAt] = useState<number | null>(null);
-  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
+  const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
   const timeoutHandle = useRef<number | null>(null);
   const waitingStartAt = useRef<number | null>(null);
   const conversation = useMemo(() => buildConversationItems([], output), [output]);
@@ -40,7 +40,7 @@ export function SessionConsole(props: {
   }));
   const visibleConversation = [
     ...historyConversation,
-    ...pendingMessages,
+    ...userMessages,
     ...conversation
   ];
 
@@ -58,7 +58,6 @@ export function SessionConsole(props: {
             timeoutHandle.current = null;
           }
           setIsWaitingResponse(false);
-          setPendingMessages([]);
           setOutput((current) => [...current, event]);
         }
       }
@@ -140,9 +139,9 @@ export function SessionConsole(props: {
           setSendError(null);
           setIsSending(true);
           setPrompt("");
-          setPendingMessages((current) => [
+          setUserMessages((current) => [
             ...current,
-            { id: `pending-${Date.now()}`, role: "user", text }
+            { id: `local-user-${Date.now()}`, role: "user", text }
           ]);
           try {
             await props.onSend(text);

@@ -5,14 +5,17 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use serde_json::Value;
 use tokio::{
-    io::AsyncReadExt,
+    io::{AsyncRead, AsyncReadExt},
     process::{Child, Command},
     sync::mpsc,
 };
 use uuid::Uuid;
 
 use crate::path_utils::normalize_for_windows_process_path;
+
+pub const CODEX_THREAD_ID_PREFIX: &str = "__CODEX_THREAD_ID__:";
 
 #[derive(Debug)]
 pub struct ProcessOutput {
@@ -21,7 +24,7 @@ pub struct ProcessOutput {
     pub text: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum OutputStream {
     Stdout,
     Stderr,
@@ -66,6 +69,7 @@ impl CodexAdapter {
             "exec".to_string(),
             "--cd".to_string(),
             normalized_working_dir.to_string_lossy().replace('\\', "/"),
+            "--json".to_string(),
         ];
         if let Some(sandbox) = options.sandbox {
             args.push("--sandbox".to_string());
@@ -92,6 +96,7 @@ impl CodexAdapter {
             "exec".to_string(),
             "--cd".to_string(),
             normalized_working_dir.to_string_lossy().replace('\\', "/"),
+            "--json".to_string(),
         ];
         if let Some(sandbox) = options.sandbox {
             args.push("--sandbox".to_string());
@@ -169,24 +174,7 @@ impl CodexAdapter {
         if let Some(stdout) = child.stdout.take() {
             let tx = output_tx.clone();
             tokio::spawn(async move {
-                let mut stdout = stdout;
-                let mut buffer = vec![0_u8; 4096];
-                loop {
-                    let Ok(read) = stdout.read(&mut buffer).await else {
-                        break;
-                    };
-                    if read == 0 {
-                        break;
-                    }
-                    let text = String::from_utf8_lossy(&buffer[..read]).to_string();
-                    let _ = tx
-                        .send(ProcessOutput {
-                            session_id,
-                            stream: OutputStream::Stdout,
-                            text,
-                        })
-                        .await;
-                }
+                forward_codex_json_output(stdout, session_id, tx, None).await;
             });
         }
         if let Some(stderr) = child.stderr.take() {
@@ -269,38 +257,7 @@ if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
             let marker = marker.clone();
             let tx = output_tx.clone();
             tokio::spawn(async move {
-                let mut stdout = stdout;
-                let mut buffer = vec![0_u8; 4096];
-                let mut started = false;
-                loop {
-                    let Ok(read) = stdout.read(&mut buffer).await else {
-                        break;
-                    };
-                    if read == 0 {
-                        break;
-                    }
-                    let mut text = String::from_utf8_lossy(&buffer[..read]).to_string();
-                    if !started {
-                        if let Some(index) = text.find(&marker) {
-                            let mut rest = text[(index + marker.len())..].to_string();
-                            rest = rest.trim_start_matches(['\r', '\n']).to_string();
-                            text = rest;
-                            started = true;
-                        } else {
-                            continue;
-                        }
-                    }
-                    if text.is_empty() {
-                        continue;
-                    }
-                    let _ = tx
-                        .send(ProcessOutput {
-                            session_id,
-                            stream: OutputStream::Stdout,
-                            text,
-                        })
-                        .await;
-                }
+                forward_codex_json_output(stdout, session_id, tx, Some(&marker)).await;
             });
         }
         if let Some(stderr) = child.stderr.take() {
@@ -458,6 +415,90 @@ pub fn format_spawn_error(invocation: &ProcessInvocation) -> String {
 #[cfg(windows)]
 fn escape_ps_single_quoted(value: &str) -> String {
     value.replace('\'', "''")
+}
+
+async fn forward_codex_json_output<R: AsyncRead + Unpin>(
+    mut reader: R,
+    session_id: Uuid,
+    output_tx: mpsc::Sender<ProcessOutput>,
+    start_marker: Option<&str>,
+) {
+    let mut buffer = vec![0_u8; 4096];
+    let mut pending = String::new();
+    let mut started = start_marker.is_none();
+    loop {
+        let Ok(read) = reader.read(&mut buffer).await else {
+            break;
+        };
+        if read == 0 {
+            break;
+        }
+        pending.push_str(&String::from_utf8_lossy(&buffer[..read]));
+
+        while let Some(index) = pending.find('\n') {
+            let mut line = pending[..index].to_string();
+            pending = pending[(index + 1)..].to_string();
+            line = line.trim_end_matches('\r').to_string();
+            if line.is_empty() {
+                continue;
+            }
+            if !started {
+                if let Some(marker) = start_marker {
+                    if line == marker {
+                        started = true;
+                    }
+                }
+                continue;
+            }
+            handle_codex_json_line(&line, session_id, &output_tx).await;
+        }
+    }
+    if started && !pending.trim().is_empty() {
+        handle_codex_json_line(pending.trim(), session_id, &output_tx).await;
+    }
+}
+
+async fn handle_codex_json_line(line: &str, session_id: Uuid, output_tx: &mpsc::Sender<ProcessOutput>) {
+    let Ok(value) = serde_json::from_str::<Value>(line) else {
+        return;
+    };
+    let Some(kind) = value.get("type").and_then(Value::as_str) else {
+        return;
+    };
+    if kind == "thread.started" {
+        if let Some(thread_id) = value.get("thread_id").and_then(Value::as_str) {
+            let _ = output_tx
+                .send(ProcessOutput {
+                    session_id,
+                    stream: OutputStream::Stdout,
+                    text: format!("{CODEX_THREAD_ID_PREFIX}{thread_id}"),
+                })
+                .await;
+        }
+        return;
+    }
+    if kind != "item.completed" {
+        return;
+    }
+    let Some(item) = value.get("item") else {
+        return;
+    };
+    if item.get("type").and_then(Value::as_str) != Some("agent_message") {
+        return;
+    }
+    let Some(text) = item.get("text").and_then(Value::as_str) else {
+        return;
+    };
+    if text.trim().is_empty() {
+        return;
+    }
+    let _ = output_tx
+        .send(ProcessOutput {
+            session_id,
+            stream: OutputStream::Stdout,
+            text: text.to_string(),
+        })
+        .await;
 }
 
 pub fn format_error_chain(error: &anyhow::Error) -> String {

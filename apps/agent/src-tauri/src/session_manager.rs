@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::{
     codex_adapter::{
         format_error_chain, CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput,
+        CODEX_THREAD_ID_PREFIX,
     },
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
@@ -250,6 +251,19 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
     }
 
     pub async fn record_process_output(&mut self, output: ProcessOutput) -> Result<()> {
+        if output.stream == OutputStream::Stdout
+            && output.text.starts_with(CODEX_THREAD_ID_PREFIX)
+        {
+            if let Some(context) = self.contexts.get_mut(&output.session_id) {
+                context.codex_session_id = Some(
+                    output
+                        .text
+                        .trim_start_matches(CODEX_THREAD_ID_PREFIX)
+                        .to_string(),
+                );
+            }
+            return Ok(());
+        }
         let event = self.output_to_event(output)?;
         self.outbound_tx.send(event).await?;
         Ok(())

@@ -23,6 +23,7 @@ fn builds_codex_exec_command_with_project() {
             "exec",
             "--cd",
             "C:/work/project",
+            "--json",
             "--sandbox",
             "workspace-write",
             "--model",
@@ -47,6 +48,7 @@ fn builds_codex_exec_resume_command_for_history_session() {
             "exec",
             "--cd",
             "C:/work/project",
+            "--json",
             "resume",
             "--skip-git-repo-check",
             "019e8268-8f45-7422-aff8-5524d4c6990b"
