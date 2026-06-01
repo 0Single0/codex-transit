@@ -2,7 +2,8 @@ use codex_transit_agent::{
     agent_config::{AgentConfig, AgentSettings},
     commands::{
         build_project_sync_request_from_state, build_realtime_config_from_state,
-        get_saved_agent_settings, save_agent_settings_in_state, AgentState,
+        get_agent_runtime_status_from_state, get_saved_agent_settings, mark_agent_runtime_stopped,
+        save_agent_settings_in_state, start_agent_runtime_in_state, AgentState,
     },
     project_registry::ProjectRegistry,
 };
@@ -110,4 +111,54 @@ fn builds_realtime_config_from_agent_state() {
 
     assert_eq!(config.url.scheme(), "ws");
     assert_eq!(config.device_id, "00000000-0000-4000-8000-000000000003");
+}
+
+#[test]
+fn rejects_runtime_start_when_agent_is_unconfigured() {
+    let state = AgentState::default();
+
+    let err = start_agent_runtime_in_state(&state).unwrap_err();
+
+    assert!(err.contains("agent is not configured"));
+}
+
+#[test]
+fn marks_runtime_running_and_prevents_duplicate_start() {
+    let state = AgentState::default();
+    save_agent_settings_in_state(
+        &state,
+        AgentSettings {
+            server_url: "http://localhost:4000".to_string(),
+            device_id: "00000000-0000-4000-8000-000000000003".to_string(),
+            device_token: "device-token".to_string(),
+        },
+    )
+    .unwrap();
+
+    let startup = start_agent_runtime_in_state(&state).unwrap();
+
+    assert_eq!(startup.url.as_str(), "ws://localhost:4000/realtime?role=agent&token=device-token&deviceId=00000000-0000-4000-8000-000000000003");
+    assert!(get_agent_runtime_status_from_state(&state).unwrap().running);
+    assert!(start_agent_runtime_in_state(&state)
+        .unwrap_err()
+        .contains("agent runtime is already running"));
+}
+
+#[test]
+fn marks_runtime_stopped() {
+    let state = AgentState::default();
+    save_agent_settings_in_state(
+        &state,
+        AgentSettings {
+            server_url: "http://localhost:4000".to_string(),
+            device_id: "00000000-0000-4000-8000-000000000003".to_string(),
+            device_token: "device-token".to_string(),
+        },
+    )
+    .unwrap();
+    start_agent_runtime_in_state(&state).unwrap();
+
+    mark_agent_runtime_stopped(&state).unwrap();
+
+    assert!(!get_agent_runtime_status_from_state(&state).unwrap().running);
 }

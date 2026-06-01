@@ -2,7 +2,8 @@ use anyhow::Result;
 use codex_transit_agent::{
     agent_runtime::{
         dispatch_event, forward_next_outbound_event, handle_next_inbound_event,
-        pump_next_file_change, pump_next_process_output, run_agent_once,
+        pump_next_file_change, pump_next_normalized_file_change, pump_next_process_output,
+        run_agent_loop, run_agent_once,
     },
     codex_adapter::{OutputStream, ProcessOutput},
     protocol::RealtimeEvent,
@@ -13,7 +14,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tokio::sync::mpsc;
+use tokio::{sync::{mpsc, oneshot}, time::{timeout, Duration}};
 use uuid::Uuid;
 
 #[derive(Default, Clone)]
@@ -111,6 +112,71 @@ async fn pumps_file_watcher_event_into_outbound_events() {
             ..
         } if relative_path == "src/main.rs" && change_type == "modified"
     ));
+}
+
+#[tokio::test]
+async fn pumps_normalized_file_change_into_outbound_events() {
+    let mut manager = SessionManager::new(RuntimeRunner::default());
+    let (change_tx, change_rx) = mpsc::channel(8);
+    let session_id = "00000000-0000-4000-8000-000000000005".parse().unwrap();
+    let project_id = "00000000-0000-4000-8000-000000000004".parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager
+        .handle_event(session_start_event(project_id, session_id))
+        .await
+        .unwrap();
+    change_tx
+        .send(codex_transit_agent::file_watcher::FileChange {
+            project_id,
+            relative_path: "src/lib.rs".to_string(),
+            old_relative_path: None,
+            change_type: "modified".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let mut change_rx = change_rx;
+    assert!(pump_next_normalized_file_change(&mut manager, &mut change_rx)
+        .await
+        .unwrap());
+
+    let event = manager.next_outbound_event().await.unwrap();
+    assert!(matches!(
+        event,
+        RealtimeEvent::FileChanged {
+            relative_path,
+            change_type,
+            ..
+        } if relative_path == "src/lib.rs" && change_type == "modified"
+    ));
+}
+
+#[tokio::test]
+async fn agent_loop_stops_when_shutdown_is_sent() {
+    let mut manager = SessionManager::new(RuntimeRunner::default());
+    let (_inbound_tx, inbound_rx) = mpsc::channel(8);
+    let (outbound_tx, _outbound_rx) = mpsc::channel(8);
+    let (_change_tx, change_rx) = mpsc::channel(8);
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+
+    let mut inbound_rx = inbound_rx;
+    let mut change_rx = change_rx;
+    shutdown_tx.send(()).unwrap();
+
+    timeout(
+        Duration::from_secs(1),
+        run_agent_loop(
+            &mut manager,
+            &mut inbound_rx,
+            &outbound_tx,
+            &mut change_rx,
+            shutdown_rx,
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 }
 
 impl ManagedSessionProcess for RuntimeProcess {

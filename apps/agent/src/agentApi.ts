@@ -14,6 +14,10 @@ export type ProjectEntry = {
   available: boolean;
 };
 
+export type AgentRuntimeStatus = {
+  running: boolean;
+};
+
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 export type AgentApi = ReturnType<typeof createAgentApi>;
@@ -38,6 +42,18 @@ export function createAgentApi(invoke: Invoke = tauriInvoke) {
 
     syncProjectsNow() {
       return invoke<void>("sync_projects_now");
+    },
+
+    startRuntime() {
+      return invoke<AgentRuntimeStatus>("start_agent_runtime");
+    },
+
+    stopRuntime() {
+      return invoke<AgentRuntimeStatus>("stop_agent_runtime");
+    },
+
+    getRuntimeStatus() {
+      return invoke<AgentRuntimeStatus>("get_agent_runtime_status");
     }
   };
 }

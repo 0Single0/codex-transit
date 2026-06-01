@@ -8,6 +8,7 @@ export function App() {
   const [deviceToken, setDeviceToken] = useState("");
   const [projectPath, setProjectPath] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
+  const [runtimeRunning, setRuntimeRunning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,9 +23,10 @@ export function App() {
     setBusy(true);
     setError(null);
     try {
-      const [settings, projectList] = await Promise.all([
+      const [settings, projectList, runtimeStatus] = await Promise.all([
         api.getSettings(),
-        api.listProjects()
+        api.listProjects(),
+        api.getRuntimeStatus()
       ]);
       if (settings) {
         setServerUrl(settings.serverUrl);
@@ -32,6 +34,7 @@ export function App() {
         setDeviceToken(settings.deviceToken);
       }
       setProjects(projectList);
+      setRuntimeRunning(runtimeStatus.running);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -87,6 +90,36 @@ export function App() {
     }
   }
 
+  async function startRuntime() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const status = await api.startRuntime();
+      setRuntimeRunning(status.running);
+      setMessage("Agent runtime started.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function stopRuntime() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const status = await api.stopRuntime();
+      setRuntimeRunning(status.running);
+      setMessage("Agent runtime stopped.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="agent-shell">
       <section className="agent-frame">
@@ -96,7 +129,7 @@ export function App() {
             <h1>Desktop bridge</h1>
           </div>
           <span className={configured ? "status-pill ready" : "status-pill"}>
-            {configured ? "Configured" : "Needs setup"}
+            {runtimeRunning ? "Connected" : configured ? "Configured" : "Needs setup"}
           </span>
         </header>
 
@@ -138,6 +171,22 @@ export function App() {
                 </button>
                 <button className="secondary" disabled={busy || !configured} onClick={syncProjects} type="button">
                   Sync projects
+                </button>
+                <button
+                  className="secondary"
+                  disabled={busy || !configured || runtimeRunning}
+                  onClick={startRuntime}
+                  type="button"
+                >
+                  Start bridge
+                </button>
+                <button
+                  className="secondary"
+                  disabled={busy || !runtimeRunning}
+                  onClick={stopRuntime}
+                  type="button"
+                >
+                  Stop bridge
                 </button>
               </div>
             </form>

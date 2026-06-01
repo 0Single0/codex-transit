@@ -38,4 +38,14 @@ describe("createAgentApi", () => {
     });
     expect(project.display_name).toBe("codex-transit");
   });
+
+  it("starts the agent runtime through the Tauri command", async () => {
+    const invoke = vi.fn().mockResolvedValue({ running: true });
+    const api = createAgentApi(invoke);
+
+    const status = await api.startRuntime();
+
+    expect(invoke).toHaveBeenCalledWith("start_agent_runtime");
+    expect(status.running).toBe(true);
+  });
 });

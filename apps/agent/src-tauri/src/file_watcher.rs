@@ -62,6 +62,26 @@ impl FileWatcher {
         watcher.watch(&root, RecursiveMode::Recursive)?;
         Ok(Self { _watcher: watcher })
     }
+
+    pub fn watch_changes(
+        project_id: Uuid,
+        root: PathBuf,
+        tx: mpsc::Sender<FileChange>,
+    ) -> Result<Self> {
+        let watched_root = root.clone();
+        let mut watcher = RecommendedWatcher::new(
+            move |result| {
+                if let Ok(event) = result {
+                    for change in event_to_file_changes(project_id, &root, event) {
+                        let _ = tx.blocking_send(change);
+                    }
+                }
+            },
+            Config::default().with_poll_interval(Duration::from_millis(500)),
+        )?;
+        watcher.watch(&watched_root, RecursiveMode::Recursive)?;
+        Ok(Self { _watcher: watcher })
+    }
 }
 
 fn rename_change(project_id: Uuid, root: &Path, paths: &[PathBuf]) -> Option<FileChange> {
