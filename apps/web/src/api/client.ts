@@ -27,6 +27,21 @@ export class ApiClient {
     });
   }
 
+  async startSession(sessionId: string): Promise<{ ok: boolean }> {
+    return this.request(`/sessions/${sessionId}/start`, { method: "POST" });
+  }
+
+  async stopSession(sessionId: string): Promise<{ ok: boolean }> {
+    return this.request(`/sessions/${sessionId}/stop`, { method: "POST" });
+  }
+
+  async requestDiff(sessionId: string, relativePath: string): Promise<{ ok: boolean; requestId: string }> {
+    return this.request(`/sessions/${sessionId}/diff`, {
+      method: "POST",
+      body: JSON.stringify({ relativePath })
+    });
+  }
+
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,

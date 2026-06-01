@@ -6,6 +6,9 @@ export function SessionConsole(props: {
   token: string;
   sessionId: string;
   onSend: (text: string) => Promise<void>;
+  onStart: () => Promise<void>;
+  onStop: () => Promise<void>;
+  onRequestDiff: (relativePath: string) => Promise<void>;
 }) {
   const [lines, setLines] = useState<string[]>([]);
   const [files, setFiles] = useState<string[]>([]);
@@ -40,11 +43,17 @@ export function SessionConsole(props: {
       >
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
         <button type="submit">Send</button>
+        <button type="button" className="secondary" onClick={props.onStart}>
+          Start session
+        </button>
+        <button type="button" className="secondary" onClick={props.onStop}>
+          Stop session
+        </button>
       </form>
       <aside className="panel stack">
         <h2>Changed files</h2>
         {files.map((file) => (
-          <button className="file-row" key={file}>
+          <button className="file-row" key={file} onClick={() => props.onRequestDiff(file)}>
             {file}
           </button>
         ))}

@@ -42,6 +42,9 @@ export function App() {
           token={token}
           sessionId={selectedSessionId}
           onSend={(text) => api.sendSessionInput(selectedSessionId, text).then(() => undefined)}
+          onStart={() => api.startSession(selectedSessionId).then(() => undefined)}
+          onStop={() => api.stopSession(selectedSessionId).then(() => undefined)}
+          onRequestDiff={(relativePath) => api.requestDiff(selectedSessionId, relativePath).then(() => undefined)}
         />
       ) : null}
     </main>

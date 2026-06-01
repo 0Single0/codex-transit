@@ -120,3 +120,9 @@ button {
   margin: 0;
   color: #b42318;
 }
+
+.secondary {
+  color: #172026;
+  background: #ffffff;
+  border-color: #c9d4da;
+}
