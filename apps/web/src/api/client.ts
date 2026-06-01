@@ -39,6 +39,13 @@ export class ApiClient {
     return this.request("/devices/bind-codes", { method: "POST" });
   }
 
+  async claimAgentLogin(pairingToken: string): Promise<{ deviceId: string }> {
+    return this.request("/devices/agent-login/claim", {
+      method: "POST",
+      body: JSON.stringify({ pairingToken })
+    });
+  }
+
   async sessions(projectId: string): Promise<SessionSummary[]> {
     return this.request(`/projects/${projectId}/sessions`);
   }

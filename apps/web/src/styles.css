@@ -24,7 +24,7 @@ textarea {
   min-height: 100vh;
   max-width: 720px;
   margin: 0 auto;
-  padding: 18px;
+  padding: 18px 18px 84px;
 }
 
 .top-bar {
@@ -148,50 +148,8 @@ button {
   padding: 8px 10px;
 }
 
-.pairing-panel {
-  display: grid;
-  grid-template-columns: 168px 1fr;
-  align-items: stretch;
-  gap: 12px;
-}
-
-.pairing-qr {
-  display: grid;
-  min-height: 168px;
-  place-items: center;
-  border: 1px solid #d9e1e5;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.pairing-qr img {
-  width: 148px;
-  height: 148px;
-}
-
-.pairing-qr span {
-  color: #5f6f78;
-  font-size: 0.9rem;
-}
-
-.bind-code {
-  display: grid;
-  align-content: center;
-  gap: 8px;
-  border: 1px dashed #8aa0aa;
-  border-radius: 8px;
-  padding: 12px;
-  background: #f8fbfc;
-}
-
-.bind-code strong {
-  font-size: 1.35rem;
-  letter-spacing: 0;
-}
-
 @media (max-width: 560px) {
-  .top-bar,
-  .pairing-panel {
+  .top-bar {
     grid-template-columns: 1fr;
   }
 
@@ -237,4 +195,31 @@ button {
 
 .diff-output.error {
   color: #ffd7d1;
+}
+
+.bottom-nav {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-width: 720px;
+  margin: 0 auto;
+  border-top: 1px solid #d9e1e5;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.bottom-nav button {
+  color: #5f6f78;
+  border-color: transparent;
+  background: transparent;
+}
+
+.bottom-nav button.active {
+  color: #ffffff;
+  border-color: #1f6feb;
+  background: #1f6feb;
 }

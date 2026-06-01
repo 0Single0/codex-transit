@@ -357,3 +357,19 @@
   - apps/agent/package.json、pnpm-lock.yaml：加入 qrcode 依赖
   - apps/server/src/modules/devices/device.routes.ts：新增登录用户直接登记 Agent 设备接口
   - apps/server/test/device.service.test.ts：补充 pairing token 长度测试
+
+[2026-06-01]
+用户输入：1.Codex Transit Agent 也应该是登录的啊，登录有账号登录、二维码扫码。2.服务器地址肯定是固定的而不是自己填的。3.本地项目肯定是登录进去哇。4.Codex Transit也应该是注册登录！进去之后最下方是导航栏，顶部会有二维码扫描的那种，扫描Codex Transit Agent 的登录绑定二维码
+完成：手机端登录后扫码绑定与底部导航 (majx)
+  - 手机端保持注册/登录入口，登录后进入带顶部扫码按钮和底部导航的应用壳
+  - 顶部扫码入口支持粘贴/扫描 Agent 登录二维码 payload 并调用认领接口绑定电脑
+  - 移除旧的手机生成电脑绑定码 UI，设备列表只负责展示已登录设备
+
+涉及文件：
+  - apps/web/src/App.tsx：新增扫码面板、底部导航和登录后应用壳状态
+  - apps/web/src/api/client.ts：新增 claimAgentLogin API
+  - apps/web/src/api/client.test.ts：覆盖手机端认领 Agent 登录二维码接口
+  - apps/web/src/pairing.ts：新增 Agent 登录二维码 payload 解析
+  - apps/web/src/pairing.test.ts：覆盖 Agent 登录二维码解析
+  - apps/web/src/components/DeviceListView.tsx：简化为已绑定设备列表
+  - apps/web/src/i18n.ts、apps/web/src/styles.css：更新扫码和底部导航文案样式

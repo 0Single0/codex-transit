@@ -56,6 +56,25 @@ describe("ApiClient", () => {
     });
   });
 
+  it("claims Agent login QR pairings for the signed in user", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ deviceId: "device-1" })
+    });
+    const api = new ApiClient("token", fetchMock as never);
+
+    await api.claimAgentLogin("pair-token");
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/devices/agent-login/claim", {
+      method: "POST",
+      body: JSON.stringify({ pairingToken: "pair-token" }),
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
+
   it("registers new users", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

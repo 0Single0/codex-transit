@@ -7,6 +7,9 @@ import { ProjectListView } from "./components/ProjectListView";
 import { SessionConsole } from "./components/SessionConsole";
 import { SessionListView } from "./components/SessionListView";
 import { Locale, messages } from "./i18n";
+import { parseAgentLoginPayload } from "./pairing";
+
+type Tab = "devices" | "sessions" | "me";
 
 export function App() {
   const [locale, setLocale] = useState<Locale>((localStorage.getItem("locale") as Locale | null) ?? "zh");
@@ -17,7 +20,11 @@ export function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [bindCode, setBindCode] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("devices");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanPayload, setScanPayload] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const api = useMemo(() => new ApiClient(token), [token]);
   const labels = messages[locale];
 
@@ -46,9 +53,19 @@ export function App() {
     setDevices(await api.devices());
   }
 
-  async function createBindCode() {
-    const response = await api.createDeviceBindCode();
-    setBindCode({ code: response.bindCode, expiresAt: response.expiresAt });
+  async function claimScannedAgent() {
+    setError(null);
+    setMessage(null);
+    const payload = parseAgentLoginPayload(scanPayload.trim());
+    if (!payload) {
+      setError(labels.invalidAgentQr);
+      return;
+    }
+    await api.claimAgentLogin(payload.pairingToken);
+    setScanPayload("");
+    setScannerOpen(false);
+    setMessage(labels.pairingClaimed);
+    await refreshDevices();
   }
 
   async function selectDevice(device: DeviceSummary) {
@@ -67,6 +84,7 @@ export function App() {
     const session = await api.createSession(selectedDevice.id, selectedProject.projectId, title);
     setSessions((current) => [session, ...current]);
     setSelectedSessionId(session.id);
+    setActiveTab("sessions");
   }
 
   return (
@@ -84,21 +102,34 @@ export function App() {
               <option value="en">{labels.english}</option>
             </select>
           </label>
+          {token ? <button onClick={() => setScannerOpen(true)}>{labels.scanAgent}</button> : null}
           {token ? <button onClick={refreshDevices}>{labels.refresh}</button> : null}
         </div>
       </header>
 
       {!token ? <LoginView labels={labels} onLogin={login} onRegister={register} /> : null}
-      {token && !selectedDevice && !selectedSessionId ? (
-        <DeviceListView
-          bindCode={bindCode}
-          devices={devices}
-          labels={labels}
-          onCreateBindCode={createBindCode}
-          onSelect={selectDevice}
-        />
+      {token && scannerOpen ? (
+        <section className="panel stack">
+          <h2>{labels.scanAgentTitle}</h2>
+          <p className="hint">{labels.scanAgentHint}</p>
+          <label>
+            {labels.scanPayload}
+            <textarea value={scanPayload} onChange={(event) => setScanPayload(event.target.value)} rows={5} />
+          </label>
+          <div className="actions">
+            <button disabled={!scanPayload.trim()} onClick={claimScannedAgent} type="button">
+              {labels.confirmPairing}
+            </button>
+            <button className="secondary" onClick={() => setScannerOpen(false)} type="button">
+              {labels.backToDevices}
+            </button>
+          </div>
+        </section>
       ) : null}
-      {token && selectedDevice && !selectedProject && !selectedSessionId ? (
+      {token && activeTab === "devices" && !scannerOpen && !selectedDevice && !selectedSessionId ? (
+        <DeviceListView devices={devices} labels={labels} onSelect={selectDevice} />
+      ) : null}
+      {token && activeTab === "devices" && selectedDevice && !selectedProject && !selectedSessionId ? (
         <ProjectListView
           labels={labels}
           projects={projects}
@@ -106,7 +137,7 @@ export function App() {
           onSelect={selectProject}
         />
       ) : null}
-      {token && selectedProject && !selectedSessionId ? (
+      {token && activeTab === "devices" && selectedProject && !selectedSessionId ? (
         <SessionListView
           labels={labels}
           project={selectedProject}
@@ -116,7 +147,13 @@ export function App() {
           onSelect={(session) => setSelectedSessionId(session.id)}
         />
       ) : null}
-      {token && selectedSessionId ? (
+      {token && activeTab === "sessions" && !selectedSessionId ? (
+        <section className="panel stack">
+          <h2>{labels.tabSessions}</h2>
+          <p className="empty-state">{labels.noPrompts}</p>
+        </section>
+      ) : null}
+      {token && activeTab === "sessions" && selectedSessionId ? (
         <SessionConsole
           labels={labels}
           token={token}
@@ -129,6 +166,33 @@ export function App() {
           onStop={() => api.stopSession(selectedSessionId).then(() => undefined)}
           onRequestDiff={(relativePath) => api.requestDiff(selectedSessionId, relativePath).then(() => undefined)}
         />
+      ) : null}
+      {token && activeTab === "me" ? (
+        <section className="panel stack">
+          <h2>{labels.tabMe}</h2>
+          <label className="language-select">
+            {labels.language}
+            <select value={locale} onChange={(event) => changeLocale(event.target.value as Locale)}>
+              <option value="zh">{labels.chinese}</option>
+              <option value="en">{labels.english}</option>
+            </select>
+          </label>
+        </section>
+      ) : null}
+      {message ? <p className="message">{message}</p> : null}
+      {error ? <p className="message error">{error}</p> : null}
+      {token ? (
+        <nav className="bottom-nav">
+          <button className={activeTab === "devices" ? "active" : ""} onClick={() => setActiveTab("devices")}>
+            {labels.tabDevices}
+          </button>
+          <button className={activeTab === "sessions" ? "active" : ""} onClick={() => setActiveTab("sessions")}>
+            {labels.tabSessions}
+          </button>
+          <button className={activeTab === "me" ? "active" : ""} onClick={() => setActiveTab("me")}>
+            {labels.tabMe}
+          </button>
+        </nav>
       ) : null}
     </main>
   );
