@@ -4,6 +4,10 @@ export function createBindCode() {
   return randomBytes(6).toString("base64url");
 }
 
+export function createPairingToken() {
+  return randomBytes(24).toString("base64url");
+}
+
 export function createDeviceToken() {
   return randomBytes(32).toString("base64url");
 }
@@ -20,4 +24,17 @@ export function verifySecret(hash: string, secret: string) {
 
 export function bindCodeExpiry(now = new Date()) {
   return new Date(now.getTime() + 5 * 60 * 1000);
+}
+
+export function pairingExpiry(now = new Date()) {
+  return new Date(now.getTime() + 5 * 60 * 1000);
+}
+
+export function buildAgentLoginPayload(serverUrl: string, pairingToken: string) {
+  return {
+    type: "codex-transit.agent-login" as const,
+    version: 1 as const,
+    serverUrl: serverUrl.replace(/\/+$/, ""),
+    pairingToken
+  };
 }

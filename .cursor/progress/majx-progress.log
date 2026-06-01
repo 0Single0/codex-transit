@@ -326,3 +326,17 @@
   - apps/web/src/i18n.ts：补充 diff 预览文案
   - apps/web/src/styles.css：增加 diff 预览样式
   - apps/web/vitest.config.ts、apps/agent/vitest.config.ts：配置 Vitest threads pool
+
+[2026-06-01]
+用户输入：1.Codex Transit Agent 也应该是登录的啊，登录有账号登录、二维码扫码。2.服务器地址肯定是固定的而不是自己填的。3.本地项目肯定是登录进去哇。4.Codex Transit也应该是注册登录！进去之后最下方是导航栏，顶部会有二维码扫描的那种，扫描Codex Transit Agent 的登录绑定二维码
+完成：服务端 Agent 登录二维码绑定基础 (majx)
+  - 新增 AgentLoginPairing 数据表保存电脑端登录二维码等待认领状态
+  - 新增 Agent 申请登录二维码、手机端认领、Agent 轮询认领结果接口
+  - 固定二维码 payload 格式为 codex-transit.agent-login 并补充单元测试
+
+涉及文件：
+  - apps/server/prisma/schema.prisma：新增 AgentLoginPairing 模型
+  - apps/server/prisma/migrations/20260601071500_agent_login_pairings/migration.sql：新增数据库迁移
+  - apps/server/src/modules/devices/device.routes.ts：新增 Agent 登录二维码申请、认领和轮询接口
+  - apps/server/src/modules/devices/device.service.ts：新增 pairing token、过期时间和二维码 payload 工具
+  - apps/server/test/device.service.test.ts：覆盖 Agent 登录二维码 payload 与过期时间

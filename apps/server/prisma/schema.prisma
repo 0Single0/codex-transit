@@ -68,6 +68,19 @@ model DeviceBindCode {
   createdAt DateTime  @default(now())
 }
 
+model AgentLoginPairing {
+  id           String    @id @default(uuid())
+  tokenHash    String    @unique
+  name         String
+  platform     DevicePlatform @default(unknown)
+  userId       String?
+  deviceId     String?
+  deviceToken  String?
+  claimedAt    DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+}
+
 model Project {
   id          String    @id @default(uuid())
   userId      String

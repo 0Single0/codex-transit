@@ -1,7 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../../plugins/auth";
-import { bindCodeExpiry, createBindCode, createDeviceToken, hashSecret } from "./device.service";
+import {
+  bindCodeExpiry,
+  buildAgentLoginPayload,
+  createBindCode,
+  createDeviceToken,
+  createPairingToken,
+  hashSecret,
+  pairingExpiry
+} from "./device.service";
+
+const PUBLIC_SERVER_URL = process.env.PUBLIC_SERVER_URL ?? `http://localhost:${process.env.PORT ?? "4000"}`;
 
 export async function registerDeviceRoutes(app: FastifyInstance) {
   app.get("/devices", async (request) => {
@@ -21,6 +31,82 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
       data: { userId: user.id, codeHash: hashSecret(code), expiresAt }
     });
     return { bindCode: code, expiresAt: expiresAt.toISOString() };
+  });
+
+  app.post("/agent/login-pairings", async (request) => {
+    const body = z
+      .object({
+        name: z.string().min(1),
+        platform: z.enum(["windows", "macos", "unknown"])
+      })
+      .parse(request.body);
+    const pairingToken = createPairingToken();
+    const expiresAt = pairingExpiry();
+    await app.prisma.agentLoginPairing.create({
+      data: {
+        tokenHash: hashSecret(pairingToken),
+        name: body.name,
+        platform: body.platform,
+        expiresAt
+      }
+    });
+
+    return {
+      pairingToken,
+      expiresAt: expiresAt.toISOString(),
+      payload: buildAgentLoginPayload(PUBLIC_SERVER_URL, pairingToken)
+    };
+  });
+
+  app.post("/devices/agent-login/claim", async (request, reply) => {
+    const user = await requireUser(request);
+    const body = z.object({ pairingToken: z.string().min(16) }).parse(request.body);
+    const tokenHash = hashSecret(body.pairingToken);
+    const pairing = await app.prisma.agentLoginPairing.findUnique({ where: { tokenHash } });
+    if (!pairing || pairing.claimedAt || pairing.expiresAt.getTime() < Date.now()) {
+      return reply.code(401).send({ error: "invalid_pairing_token" });
+    }
+
+    const token = createDeviceToken();
+    const device = await app.prisma.device.create({
+      data: {
+        userId: user.id,
+        name: pairing.name,
+        platform: pairing.platform,
+        tokenHash: hashSecret(token),
+        online: false
+      }
+    });
+    await app.prisma.agentLoginPairing.update({
+      where: { id: pairing.id },
+      data: {
+        userId: user.id,
+        deviceId: device.id,
+        deviceToken: token,
+        claimedAt: new Date()
+      }
+    });
+
+    return { deviceId: device.id };
+  });
+
+  app.get("/agent/login-pairings/:pairingToken", async (request, reply) => {
+    const params = z.object({ pairingToken: z.string().min(16) }).parse(request.params);
+    const pairing = await app.prisma.agentLoginPairing.findUnique({
+      where: { tokenHash: hashSecret(params.pairingToken) }
+    });
+    if (!pairing || pairing.expiresAt.getTime() < Date.now()) {
+      return reply.code(404).send({ status: "expired" });
+    }
+    if (!pairing.deviceId || !pairing.deviceToken) {
+      return { status: "pending" };
+    }
+
+    return {
+      status: "claimed",
+      deviceId: pairing.deviceId,
+      token: pairing.deviceToken
+    };
   });
 
   app.post("/agent/bind", async (request, reply) => {
