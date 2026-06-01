@@ -1,3 +1,5 @@
+pub mod codex_adapter;
+pub mod file_watcher;
 pub mod path_guard;
 pub mod project_registry;
 
