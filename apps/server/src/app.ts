@@ -5,6 +5,7 @@ import Fastify from "fastify";
 import { registerAuthRoutes } from "./modules/auth/auth.routes";
 import { registerDeviceRoutes } from "./modules/devices/device.routes";
 import { registerProjectRoutes } from "./modules/projects/project.routes";
+import { registerRealtimeGateway } from "./modules/realtime/realtime.gateway";
 import { registerSessionRoutes } from "./modules/sessions/session.routes";
 import { authPlugin } from "./plugins/auth";
 import { prismaPlugin } from "./plugins/prisma";
@@ -23,6 +24,7 @@ export async function buildApp(options: { jwtSecret: string }) {
   await registerDeviceRoutes(app);
   await registerProjectRoutes(app);
   await registerSessionRoutes(app);
+  await registerRealtimeGateway(app);
 
   return app;
 }
