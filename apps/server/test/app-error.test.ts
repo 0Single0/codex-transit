@@ -15,4 +15,18 @@ describe("app error handling", () => {
     expect(response.json()).toMatchObject({ error: "validation_error" });
     await app.close();
   });
+
+  it("returns invalid auth tokens as 401 responses", async () => {
+    const app = await buildApp({ jwtSecret: "01234567890123456789012345678901" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/devices",
+      headers: { authorization: "Bearer not-a-valid-token" }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid_token" });
+    await app.close();
+  });
 });

@@ -1,6 +1,6 @@
 import type { AxiosInstance } from "axios";
 import { describe, expect, it, vi } from "vitest";
-import { ApiClient } from "./client";
+import { ApiClient, ApiError } from "./client";
 
 function createHttpMock(data: unknown = {}) {
   return {
@@ -102,5 +102,24 @@ describe("ApiClient", () => {
     const api = new ApiClient(null, http);
 
     await expect(api.register("new@example.com", "123")).rejects.toThrow("Password is too short");
+  });
+
+  it("preserves response status codes on failed requests", async () => {
+    const error = {
+      isAxiosError: true,
+      response: {
+        status: 401,
+        data: { error: "invalid_token" }
+      }
+    };
+    const http = {
+      request: vi.fn().mockRejectedValue(error)
+    } as unknown as AxiosInstance & { request: ReturnType<typeof vi.fn> };
+    const api = new ApiClient("old-token", http);
+
+    await expect(api.devices()).rejects.toMatchObject({
+      message: "invalid_token",
+      status: 401
+    } satisfies Partial<ApiError>);
   });
 });

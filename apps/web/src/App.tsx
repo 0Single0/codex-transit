@@ -1,6 +1,6 @@
 import type { DeviceSummary, ProjectSummary, SessionSummary } from "@codex-transit/shared";
-import { useMemo, useState } from "react";
-import { ApiClient } from "./api/client";
+import { useEffect, useMemo, useState } from "react";
+import { ApiClient, ApiError } from "./api/client";
 import { DeviceListView } from "./components/DeviceListView";
 import { LoginView } from "./components/LoginView";
 import { ProjectListView } from "./components/ProjectListView";
@@ -33,6 +33,41 @@ export function App() {
     setLocale(nextLocale);
   }
 
+  function resetSession(messageText = labels.sessionExpired) {
+    localStorage.removeItem("token");
+    setToken(null);
+    setDevices([]);
+    setSelectedDevice(null);
+    setProjects([]);
+    setSelectedProject(null);
+    setSessions([]);
+    setSelectedSessionId(null);
+    setActiveTab("devices");
+    setScannerOpen(false);
+    setScanPayload("");
+    setMessage(null);
+    setError(messageText);
+  }
+
+  async function runAuthorized<T>(operation: () => Promise<T>): Promise<T | null> {
+    try {
+      return await operation();
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        resetSession();
+        return null;
+      }
+      throw caught;
+    }
+  }
+
+  useEffect(() => {
+    if (!token) return;
+    void runAuthorized(async () => {
+      setDevices(await api.devices());
+    });
+  }, [api, token]);
+
   async function login(email: string, password: string) {
     const result = await api.login(email, password);
     localStorage.setItem("token", result.token);
@@ -50,7 +85,9 @@ export function App() {
   }
 
   async function refreshDevices() {
-    setDevices(await api.devices());
+    await runAuthorized(async () => {
+      setDevices(await api.devices());
+    });
   }
 
   async function claimScannedAgent() {
@@ -61,7 +98,8 @@ export function App() {
       setError(labels.invalidAgentQr);
       return;
     }
-    await api.claimAgentLogin(payload.pairingToken);
+    const claimed = await runAuthorized(() => api.claimAgentLogin(payload.pairingToken));
+    if (!claimed) return;
     setScanPayload("");
     setScannerOpen(false);
     setMessage(labels.pairingClaimed);
@@ -70,18 +108,22 @@ export function App() {
 
   async function selectDevice(device: DeviceSummary) {
     setSelectedDevice(device);
-    const response = await api.deviceProjects(device.id);
+    const response = await runAuthorized(() => api.deviceProjects(device.id));
+    if (!response) return;
     setProjects(response.projects);
   }
 
   async function selectProject(project: ProjectSummary) {
     setSelectedProject(project);
-    setSessions(await api.sessions(project.projectId));
+    await runAuthorized(async () => {
+      setSessions(await api.sessions(project.projectId));
+    });
   }
 
   async function createSession(title: string) {
     if (!selectedDevice || !selectedProject) return;
-    const session = await api.createSession(selectedDevice.id, selectedProject.projectId, title);
+    const session = await runAuthorized(() => api.createSession(selectedDevice.id, selectedProject.projectId, title));
+    if (!session) return;
     setSessions((current) => [session, ...current]);
     setSelectedSessionId(session.id);
     setActiveTab("sessions");
@@ -158,13 +200,21 @@ export function App() {
           labels={labels}
           token={token}
           sessionId={selectedSessionId}
-          loadFileChanges={() => api.sessionFileChanges(selectedSessionId)}
-          loadMessages={() => api.sessionMessages(selectedSessionId)}
-          loadOutput={() => api.sessionOutput(selectedSessionId)}
-          onSend={(text) => api.sendSessionInput(selectedSessionId, text).then(() => undefined)}
-          onStart={() => api.startSession(selectedSessionId).then(() => undefined)}
-          onStop={() => api.stopSession(selectedSessionId).then(() => undefined)}
-          onRequestDiff={(relativePath) => api.requestDiff(selectedSessionId, relativePath).then(() => undefined)}
+          loadFileChanges={async () => (await runAuthorized(() => api.sessionFileChanges(selectedSessionId))) ?? []}
+          loadMessages={async () => (await runAuthorized(() => api.sessionMessages(selectedSessionId))) ?? []}
+          loadOutput={async () => (await runAuthorized(() => api.sessionOutput(selectedSessionId))) ?? []}
+          onSend={async (text) => {
+            await runAuthorized(() => api.sendSessionInput(selectedSessionId, text));
+          }}
+          onStart={async () => {
+            await runAuthorized(() => api.startSession(selectedSessionId));
+          }}
+          onStop={async () => {
+            await runAuthorized(() => api.stopSession(selectedSessionId));
+          }}
+          onRequestDiff={async (relativePath) => {
+            await runAuthorized(() => api.requestDiff(selectedSessionId, relativePath));
+          }}
         />
       ) : null}
       {token && activeTab === "me" ? (

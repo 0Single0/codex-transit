@@ -12,6 +12,16 @@ import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from "
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export class ApiClient {
   private http: AxiosInstance;
 
@@ -110,9 +120,14 @@ export class ApiClient {
       });
       return response.data;
     } catch (caught) {
-      throw new Error(readAxiosErrorMessage(caught));
+      throw readApiError(caught);
     }
   }
+}
+
+function readApiError(error: unknown) {
+  if (!isAxiosErrorWithData(error)) return error instanceof Error ? error : new Error(String(error));
+  return new ApiError(readAxiosErrorMessage(error), error.response?.status);
 }
 
 function readAxiosErrorMessage(error: unknown) {

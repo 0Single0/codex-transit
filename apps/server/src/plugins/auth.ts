@@ -8,10 +8,14 @@ declare module "fastify" {
 
 export const authPlugin = fp(async (app) => {
   app.decorateRequest("authUser", undefined);
-  app.addHook("preHandler", async (request) => {
+  app.addHook("preHandler", async (request, reply) => {
     if (!request.headers.authorization) return;
-    const payload = await request.jwtVerify<{ sub: string; email: string }>();
-    request.authUser = { id: payload.sub, email: payload.email };
+    try {
+      const payload = await request.jwtVerify<{ sub: string; email: string }>();
+      request.authUser = { id: payload.sub, email: payload.email };
+    } catch {
+      return reply.code(401).send({ error: "invalid_token" });
+    }
   });
 });
 

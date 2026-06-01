@@ -403,3 +403,18 @@
   - apps/web/src/components/LoginView.tsx：显示明确认证错误提示
   - apps/web/src/i18n.ts：补充邮箱已注册和密码错误文案
   - apps/web/package.json、pnpm-lock.yaml：加入 axios 依赖
+
+[2026-06-01]
+用户输入：不能用axios吗
+完成：修复坏 token 导致设备列表请求异常的问题 (majx)
+  - 服务端将无效 JWT 统一转换为 401 invalid_token 响应，避免内部 JWT 错误结构泄漏到客户端
+  - Web API 客户端保留 axios 响应状态码，方便界面识别登录过期
+  - Web 端遇到 401 自动清除本地 token、回到登录页并显示登录过期提示
+
+涉及文件：
+  - apps/server/src/plugins/auth.ts：捕获 JWT 校验失败并返回 invalid_token
+  - apps/server/test/app-error.test.ts：新增坏 token 的 401 回归测试
+  - apps/web/src/api/client.ts：新增 ApiError 并保留 HTTP status
+  - apps/web/src/api/client.test.ts：覆盖 axios 错误状态码传递
+  - apps/web/src/App.tsx：统一处理登录过期并自动刷新/清理旧 token
+  - apps/web/src/i18n.ts：新增登录过期中英文文案
