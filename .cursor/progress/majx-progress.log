@@ -1,4 +1,4 @@
-﻿
+
 [2026-06-01]
 用户输入：如果未完成请继续，如果完成请回答1，如果没完成记得如果有文件>1000，拆分组件、函数到正确目录
 完成：Agent 会话运行边界接入 Codex 进程管理
@@ -434,3 +434,22 @@
   - apps/web/src/api/client.ts：保留服务端错误码
   - apps/web/src/api/client.test.ts：覆盖错误码传递
   - apps/web/src/i18n.ts：补充输入和发送失败文案
+
+[2026-06-01]
+用户输入：1.对话之后疑似没有启动一个cmd去对话。我发送之后没响应；2.对话界面需要对话形式，不要启动会话停止会话和复杂文件/变更/设置
+完成：改为发送即自动启动 Codex CLI，并收敛手机端为聊天界面 (majx)
+  - 服务端发送输入时自动依次下发 session.start 和 session.input，用户无需手动启动会话
+  - Agent 忽略服务器 connected ack，避免 WebSocket 连接刚建立就解析失败断开
+  - Agent 每条输入启动一次 codex exec，将终端输出继续同步到手机端
+  - Web 会话页改为纯聊天样式，隐藏启动/停止、文件、变更、diff 等复杂控制
+
+涉及文件：
+  - apps/server/src/modules/sessions/session.routes.ts：发送输入时自动投递 start/input 事件
+  - apps/server/src/modules/sessions/session.service.ts：新增 start+input 事件构造 helper
+  - apps/server/test/session.service.test.ts：覆盖自动启动事件顺序
+  - apps/agent/src-tauri/src/server_client.rs：忽略 connected ack
+  - apps/agent/src-tauri/src/session_manager.rs：每次输入启动新的 Codex CLI 执行
+  - apps/agent/src-tauri/tests/server_client_test.rs、session_manager_test.rs：覆盖 ack 忽略和每次输入启动
+  - apps/web/src/components/SessionConsole.tsx、styles.css：改为聊天界面和底部输入框
+  - apps/web/src/conversationItems.ts、conversationItems.test.ts：合并用户消息和终端输出为聊天流
+  - apps/web/src/App.tsx、i18n.ts：移除旧控制 props 并调整文案

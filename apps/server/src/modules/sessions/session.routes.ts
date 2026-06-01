@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../../plugins/auth";
 import { connectionRegistry } from "../realtime/realtime.gateway";
-import { buildSessionRealtimeBase, toSessionSummary } from "./session.service";
+import { buildSessionRealtimeBase, buildStartAndInputEvents, toSessionSummary } from "./session.service";
 
 export async function registerSessionRoutes(app: FastifyInstance) {
   app.get("/projects/:projectId/sessions", async (request) => {
@@ -93,16 +93,11 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       data: { sessionId: session.id, role: "user", text: body.text }
     });
 
-    const event = {
-      type: "session.input",
-      eventId: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      ...buildSessionRealtimeBase(session),
-      text: body.text
-    };
-
-    const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
-    if (!delivered) return reply.code(409).send({ error: "agent_offline" });
+    for (const event of buildStartAndInputEvents(session, body.text)) {
+      const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
+      if (!delivered) return reply.code(409).send({ error: "agent_offline" });
+    }
+    await app.prisma.session.update({ where: { id: session.id }, data: { status: "running" } });
     return { ok: true };
   });
 

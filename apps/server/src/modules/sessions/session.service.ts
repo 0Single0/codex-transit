@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 export function normalizeSessionTitle(title: string) {
   return title.trim().slice(0, 120);
 }
@@ -35,4 +37,40 @@ export function buildSessionRealtimeBase(session: {
     projectId: session.project?.agentKey ?? session.projectId,
     sessionId: session.id
   };
+}
+
+export function buildStartAndInputEvents(
+  session: {
+    id: string;
+    userId: string;
+    deviceId: string;
+    projectId: string;
+    project?: { agentKey: string } | null;
+  },
+  text: string,
+  clock = {
+    eventId: cryptoRandomId,
+    now: () => new Date().toISOString()
+  }
+) {
+  const base = buildSessionRealtimeBase(session);
+  return [
+    {
+      type: "session.start",
+      eventId: clock.eventId(),
+      timestamp: clock.now(),
+      ...base
+    },
+    {
+      type: "session.input",
+      eventId: clock.eventId(),
+      timestamp: clock.now(),
+      ...base,
+      text
+    }
+  ];
+}
+
+function cryptoRandomId() {
+  return crypto.randomUUID();
 }

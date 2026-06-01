@@ -1,6 +1,6 @@
 use codex_transit_agent::{
     agent_config::AgentSettings,
-    server_client::{agent_realtime_url, AgentRealtimeConfig},
+    server_client::{agent_realtime_url, parse_realtime_message, AgentRealtimeConfig},
 };
 
 #[test]
@@ -45,4 +45,11 @@ fn builds_agent_realtime_config_from_saved_settings() {
         "wss://relay.example.com/realtime?role=agent&token=secret&deviceId=00000000-0000-4000-8000-000000000003"
     );
     assert_eq!(config.device_id, settings.device_id);
+}
+
+#[test]
+fn ignores_realtime_connected_ack_messages() {
+    let event = parse_realtime_message(r#"{"type":"connected","userId":"user-1"}"#).unwrap();
+
+    assert!(event.is_none());
 }

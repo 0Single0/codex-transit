@@ -35,7 +35,7 @@ pub struct SessionManager<
     runner: R,
     diff_provider: D,
     projects: HashMap<Uuid, PathBuf>,
-    sessions: HashMap<Uuid, R::Process>,
+    sessions: HashMap<Uuid, Vec<R::Process>>,
     contexts: HashMap<Uuid, SessionContext>,
     output_seq: HashMap<Uuid, u64>,
     output_tx: mpsc::Sender<ProcessOutput>,
@@ -156,24 +156,24 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let Some(project_root) = self.projects.get(&context.project_id).cloned() else {
             bail!("project is not registered");
         };
-        if let Some(process) = self.sessions.get_mut(&session_id) {
-            return process.send_input(&text).await;
-        }
         let process = self
             .runner
             .start_session(session_id, project_root, text, self.output_tx.clone())
             .await?;
-        self.sessions.insert(session_id, process);
+        self.sessions.entry(session_id).or_default().push(process);
         Ok(())
     }
 
     pub async fn stop_session(&mut self, session_id: Uuid) -> Result<()> {
         self.contexts.remove(&session_id);
         self.output_seq.remove(&session_id);
-        let Some(mut process) = self.sessions.remove(&session_id) else {
+        let Some(processes) = self.sessions.remove(&session_id) else {
             return Ok(());
         };
-        process.stop().await
+        for mut process in processes {
+            process.stop().await?;
+        }
+        Ok(())
     }
 
     pub async fn record_process_output(&mut self, output: ProcessOutput) -> Result<()> {

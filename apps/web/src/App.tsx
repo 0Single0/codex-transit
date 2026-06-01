@@ -206,20 +206,10 @@ export function App() {
           labels={labels}
           token={token}
           sessionId={selectedSessionId}
-          loadFileChanges={async () => (await runAuthorized(() => api.sessionFileChanges(selectedSessionId))) ?? []}
           loadMessages={async () => (await runAuthorized(() => api.sessionMessages(selectedSessionId))) ?? []}
           loadOutput={async () => (await runAuthorized(() => api.sessionOutput(selectedSessionId))) ?? []}
           onSend={async (text) => {
             await runAuthorized(() => api.sendSessionInput(selectedSessionId, text));
-          }}
-          onStart={async () => {
-            await runAuthorized(() => api.startSession(selectedSessionId));
-          }}
-          onStop={async () => {
-            await runAuthorized(() => api.stopSession(selectedSessionId));
-          }}
-          onRequestDiff={async (relativePath) => {
-            await runAuthorized(() => api.requestDiff(selectedSessionId, relativePath));
           }}
         />
       ) : null}

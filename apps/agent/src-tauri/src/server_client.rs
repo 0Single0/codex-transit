@@ -6,6 +6,14 @@ use url::Url;
 
 use crate::{agent_config::AgentSettings, protocol::RealtimeEvent};
 
+pub fn parse_realtime_message(text: &str) -> Result<Option<RealtimeEvent>> {
+    let value: serde_json::Value = serde_json::from_str(text)?;
+    if value.get("type").and_then(|kind| kind.as_str()) == Some("connected") {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::from_value(value)?))
+}
+
 pub fn agent_realtime_url(base_url: &str, device_id: &str, token: &str) -> Result<Url> {
     let mut url = Url::parse(base_url)?;
     url.set_scheme(match url.scheme() {
@@ -69,8 +77,9 @@ impl ServerClient {
             while let Some(message) = read.next().await {
                 let message = message?;
                 if message.is_text() {
-                    let event: RealtimeEvent = serde_json::from_str(message.to_text()?)?;
-                    inbound_tx.send(event).await?;
+                    if let Some(event) = parse_realtime_message(message.to_text()?)? {
+                        inbound_tx.send(event).await?;
+                    }
                 }
             }
             anyhow::Ok(())

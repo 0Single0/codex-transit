@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildSessionRealtimeBase, toSessionSummary } from "../src/modules/sessions/session.service";
+import {
+  buildSessionRealtimeBase,
+  buildStartAndInputEvents,
+  toSessionSummary
+} from "../src/modules/sessions/session.service";
 
 describe("session service", () => {
   it("maps database dates to ISO strings", () => {
@@ -44,5 +48,44 @@ describe("session service", () => {
       projectId: "00000000-0000-4000-8000-000000000099",
       sessionId: session.id
     });
+  });
+
+  it("builds start and input events for first prompt delivery", () => {
+    const session = {
+      id: "00000000-0000-4000-8000-000000000001",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      projectId: "00000000-0000-4000-8000-000000000004",
+      project: {
+        agentKey: "00000000-0000-4000-8000-000000000099"
+      }
+    };
+
+    const events = buildStartAndInputEvents(session, "帮我改登录页", {
+      eventId: () => "00000000-0000-4000-8000-000000000010",
+      now: () => "2026-06-01T00:00:00.000Z"
+    });
+
+    expect(events).toEqual([
+      {
+        type: "session.start",
+        eventId: "00000000-0000-4000-8000-000000000010",
+        timestamp: "2026-06-01T00:00:00.000Z",
+        userId: session.userId,
+        deviceId: session.deviceId,
+        projectId: "00000000-0000-4000-8000-000000000099",
+        sessionId: session.id
+      },
+      {
+        type: "session.input",
+        eventId: "00000000-0000-4000-8000-000000000010",
+        timestamp: "2026-06-01T00:00:00.000Z",
+        userId: session.userId,
+        deviceId: session.deviceId,
+        projectId: "00000000-0000-4000-8000-000000000099",
+        sessionId: session.id,
+        text: "帮我改登录页"
+      }
+    ]);
   });
 });

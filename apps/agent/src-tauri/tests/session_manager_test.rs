@@ -163,6 +163,32 @@ async fn starts_codex_with_first_input_prompt() {
 }
 
 #[tokio::test]
+async fn starts_codex_for_each_input_prompt() {
+    let runner = FakeRunner::default();
+    let state = runner.state.clone();
+    let mut manager = SessionManager::new(runner);
+    let session_id = SESSION_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.start_session(session_id, project_id).await.unwrap();
+    manager
+        .send_input(session_id, "first".to_string())
+        .await
+        .unwrap();
+    manager
+        .send_input(session_id, "second".to_string())
+        .await
+        .unwrap();
+
+    let state = state.lock().unwrap();
+    assert_eq!(
+        state.started_prompts,
+        vec!["first".to_string(), "second".to_string()]
+    );
+}
+
+#[tokio::test]
 async fn handles_start_and_input_events() {
     let runner = FakeRunner::default();
     let state = runner.state.clone();

@@ -1,40 +1,34 @@
 import type {
-  FileChangeHistory,
   RealtimeEvent,
   SessionMessage,
   TerminalOutputChunk
 } from "@codex-transit/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
+import { buildConversationItems } from "../conversationItems";
 import type { WebMessages } from "../i18n";
-import { applyDiffResult, type DiffPreview } from "../sessionDiffs";
 
 export function SessionConsole(props: {
   labels: WebMessages;
   token: string;
   sessionId: string;
   loadOutput: () => Promise<TerminalOutputChunk[]>;
-  loadFileChanges: () => Promise<FileChangeHistory[]>;
   loadMessages: () => Promise<SessionMessage[]>;
   onSend: (text: string) => Promise<void>;
-  onStart: () => Promise<void>;
-  onStop: () => Promise<void>;
-  onRequestDiff: (relativePath: string) => Promise<void>;
 }) {
-  const [lines, setLines] = useState<string[]>([]);
-  const [files, setFiles] = useState<string[]>([]);
-  const [diffs, setDiffs] = useState<DiffPreview[]>([]);
+  const [output, setOutput] = useState<TerminalOutputChunk[]>([]);
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [prompt, setPrompt] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const conversation = useMemo(() => buildConversationItems(messages, output), [messages, output]);
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([props.loadOutput(), props.loadFileChanges(), props.loadMessages()]).then(
-      ([output, changes, messages]) => {
+    void Promise.all([props.loadOutput(), props.loadMessages()]).then(
+      ([output, messages]) => {
         if (!mounted) return;
-        setLines(output.map((chunk) => chunk.text));
-        setFiles(Array.from(new Set(changes.map((change) => change.relativePath))));
+        setOutput(output);
         setMessages(messages);
       }
     );
@@ -44,13 +38,7 @@ export function SessionConsole(props: {
       sessionId: props.sessionId,
       onEvent(event: RealtimeEvent) {
         if (event.type === "codex.output.chunk") {
-          setLines((current) => [...current, event.text]);
-        }
-        if (event.type === "file.changed") {
-          setFiles((current) => Array.from(new Set([...current, event.relativePath])));
-        }
-        if (event.type === "diff.result") {
-          setDiffs((current) => applyDiffResult(current, event));
+          setOutput((current) => [...current, event]);
         }
       }
     });
@@ -61,28 +49,33 @@ export function SessionConsole(props: {
   }, [props.token, props.sessionId]);
 
   return (
-    <section className="console-grid">
-      <section className="panel stack">
-        <h2>{props.labels.conversation}</h2>
-        {messages.length ? (
-          messages.map((message, index) => (
-            <p className="message-row" key={message.id ?? index}>
-              <strong>{message.role}</strong>
-              <span>{message.text}</span>
-            </p>
+    <section className="chat-shell">
+      <div className="chat-scroll">
+        {conversation.length ? (
+          conversation.map((item) => (
+            <article className={`chat-bubble ${item.role}`} key={item.id}>
+              <strong>{item.role === "user" ? props.labels.you : "Codex"}</strong>
+              <pre>{item.text}</pre>
+            </article>
           ))
         ) : (
-          <p className="empty-state">{props.labels.noPrompts}</p>
+          <section className="chat-empty">
+            <div className="terminal-mark">&gt;_</div>
+            <h2>{props.labels.startCodexChat}</h2>
+            <p>{props.labels.startCodexChatHint}</p>
+          </section>
         )}
-      </section>
-      <pre className="console">{lines.join("\n")}</pre>
+      </div>
       <form
-        className="panel stack"
+        className="chat-composer"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (!prompt.trim()) return;
-          const text = prompt;
+          const text = prompt.trim();
+          if (!text || isSending) return;
           setSendError(null);
+          setIsSending(true);
+          setMessages((current) => [...current, { role: "user", text }]);
+          setPrompt("");
           try {
             await props.onSend(text);
           } catch (caught) {
@@ -90,48 +83,22 @@ export function SessionConsole(props: {
               ? props.labels.agentOffline
               : props.labels.sendFailed;
             setSendError(message);
-            return;
+          } finally {
+            setIsSending(false);
           }
-          setMessages((current) => [...current, { role: "user", text }]);
-          setPrompt("");
         }}
       >
         <textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={props.labels.promptPlaceholder}
-          rows={5}
+          rows={3}
         />
-        {sendError ? <p className="error">{sendError}</p> : null}
-        <button type="submit">{props.labels.send}</button>
-        <button type="button" className="secondary" onClick={props.onStart}>
-          {props.labels.startSession}
-        </button>
-        <button type="button" className="secondary" onClick={props.onStop}>
-          {props.labels.stopSession}
+        <button aria-label={props.labels.send} disabled={!prompt.trim() || isSending} type="submit">
+          {props.labels.send}
         </button>
       </form>
-      <aside className="panel stack">
-        <h2>{props.labels.changedFiles}</h2>
-        {files.map((file) => (
-          <button className="file-row" key={file} onClick={() => props.onRequestDiff(file)}>
-            {file}
-          </button>
-        ))}
-      </aside>
-      <section className="panel stack">
-        <h2>{props.labels.diffPreview}</h2>
-        {diffs.length ? (
-          diffs.map((diff, index) => (
-            <article className="diff-card" key={`${diff.relativePath}-${index}`}>
-              <strong>{diff.relativePath}</strong>
-              <pre className={diff.ok ? "diff-output" : "diff-output error"}>{diff.text}</pre>
-            </article>
-          ))
-        ) : (
-          <p className="empty-state">{props.labels.noDiffs}</p>
-        )}
-      </section>
+      {sendError ? <p className="chat-error">{sendError}</p> : null}
     </section>
   );
 }
