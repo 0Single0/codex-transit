@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { authenticateDeviceToken, readDeviceTokenHeader } from "../devices/device-auth";
 import { requireUser } from "../../plugins/auth";
 
 const syncProjectsSchema = z.object({
@@ -27,16 +28,20 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/agent/projects/sync", async (request) => {
-    const user = await requireUser(request);
+  app.post("/agent/projects/sync", async (request, reply) => {
     const input = syncProjectsSchema.parse(request.body);
+    const token = readDeviceTokenHeader(request.headers["x-device-token"]);
+    if (!token) return reply.code(401).send({ error: "missing_device_token" });
+    const device = await authenticateDeviceToken(app.prisma, input.deviceId, token);
+    if (!device) return reply.code(401).send({ error: "invalid_device_token" });
+
     for (const project of input.projects) {
       await app.prisma.project.upsert({
         where: { deviceId_agentKey: { deviceId: input.deviceId, agentKey: project.agentKey } },
         update: project,
         create: {
           ...project,
-          userId: user.id,
+          userId: device.userId,
           deviceId: input.deviceId
         }
       });

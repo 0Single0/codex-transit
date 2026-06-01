@@ -1,7 +1,7 @@
 import { realtimeEventSchema } from "@codex-transit/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { verifySecret } from "../devices/device.service";
+import { authenticateDeviceToken } from "../devices/device-auth";
 import { ConnectionRegistry } from "./connection-registry";
 
 export const connectionRegistry = new ConnectionRegistry();
@@ -20,8 +20,8 @@ export async function registerRealtimeGateway(app: FastifyInstance) {
 
     if (query.role === "agent") {
       if (!query.deviceId) throw new Error("deviceId_required");
-      const device = await app.prisma.device.findUnique({ where: { id: query.deviceId } });
-      if (!device?.tokenHash || !verifySecret(device.tokenHash, query.token)) {
+      const device = await authenticateDeviceToken(app.prisma, query.deviceId, query.token);
+      if (!device) {
         socket.close(1008, "invalid_device_token");
         return;
       }
