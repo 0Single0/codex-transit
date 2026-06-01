@@ -296,3 +296,18 @@
   - apps/web/src/i18n.ts：补充扫码绑定中英文文案
   - apps/web/src/styles.css：增加绑定二维码响应式样式
   - apps/web/package.json、pnpm-lock.yaml：加入 qrcode 依赖和类型
+
+[2026-06-01]
+用户输入：继续
+完成：电脑端扫码内容解析绑定 (majx)
+  - 新增 Agent 端 Codex Transit 绑定二维码 payload 解析器
+  - 在电脑端界面加入扫码内容粘贴识别入口，自动填充服务器地址和绑定码
+  - 将根测试脚本改为顺序执行，规避 Windows 并行 worker spawn UNKNOWN
+
+涉及文件：
+  - apps/agent/src/pairing.ts：解析手机端二维码 payload
+  - apps/agent/src/pairing.test.ts：覆盖有效和无效扫码内容
+  - apps/agent/src/App.tsx：新增扫码内容粘贴识别交互
+  - apps/agent/src/i18n.ts：补充中英文扫码内容文案
+  - apps/agent/src/styles.css：支持 textarea 表单样式
+  - package.json：让 pnpm test 顺序执行 workspace 测试

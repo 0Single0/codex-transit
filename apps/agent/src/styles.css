@@ -14,7 +14,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -37,7 +38,8 @@ button:disabled {
   opacity: 0.55;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   min-width: 0;
   border: 1px solid #c6c8bf;
@@ -45,6 +47,11 @@ input {
   padding: 10px 12px;
   color: #192026;
   background: #ffffff;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.45;
 }
 
 select {

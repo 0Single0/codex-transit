@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createAgentApi, ProjectEntry } from "./agentApi";
 import { Locale, messages } from "./i18n";
+import { parsePairingPayload } from "./pairing";
 
 export function App() {
   const api = useMemo(() => createAgentApi(), []);
@@ -8,6 +9,7 @@ export function App() {
   const [serverUrl, setServerUrl] = useState("");
   const [deviceId, setDeviceId] = useState("");
   const [deviceToken, setDeviceToken] = useState("");
+  const [qrPayload, setQrPayload] = useState("");
   const [bindCode, setBindCode] = useState("");
   const [deviceName, setDeviceName] = useState(
     typeof navigator === "undefined" ? "Desktop Agent" : navigator.userAgent.includes("Mac") ? "Mac Agent" : "Windows Agent"
@@ -90,6 +92,20 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function applyQrPayload() {
+    setError(null);
+    setMessage(null);
+    const payload = parsePairingPayload(qrPayload.trim());
+    if (!payload) {
+      setError(labels.qrPayloadInvalid);
+      return;
+    }
+    setServerUrl(payload.serverUrl);
+    setBindCode(payload.bindCode);
+    setQrPayload("");
+    setMessage(labels.qrPayloadApplied);
   }
 
   async function addProject(event: FormEvent<HTMLFormElement>) {
@@ -180,6 +196,20 @@ export function App() {
         <div className="layout-grid">
           <section className="panel" aria-labelledby="settings-title">
             <h2 id="settings-title">{labels.relayConnection}</h2>
+            <div className="form-grid">
+              <label>
+                {labels.qrPayload}
+                <textarea
+                  value={qrPayload}
+                  onChange={(event) => setQrPayload(event.target.value)}
+                  placeholder={labels.qrPayloadPlaceholder}
+                  rows={4}
+                />
+              </label>
+              <button className="secondary" disabled={busy || !qrPayload.trim()} onClick={applyQrPayload} type="button">
+                {labels.applyQrPayload}
+              </button>
+            </div>
             <form className="form-grid" onSubmit={bindDevice}>
               <label>
                 {labels.pairingCode}
