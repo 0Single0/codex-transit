@@ -74,4 +74,49 @@ describe("createAgentApi", () => {
     });
     expect(result.deviceToken).toBe("token-1");
   });
+
+  it("registers the agent after account login", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ deviceId: "device-1", token: "token-1" })
+    });
+    const api = createAgentApi(vi.fn(), fetcher as never);
+
+    await api.registerLoggedInDevice("user-token", {
+      name: "Workstation",
+      platform: "windows"
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("http://localhost:4000/devices/agent-login/register", {
+      method: "POST",
+      body: JSON.stringify({ name: "Workstation", platform: "windows" }),
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer user-token"
+      }
+    });
+  });
+
+  it("creates an agent login pairing QR payload", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          pairingToken: "pair-token",
+          expiresAt: "2026-06-01T00:00:00.000Z",
+          payload: { type: "codex-transit.agent-login", version: 1 }
+        })
+    });
+    const api = createAgentApi(vi.fn(), fetcher as never);
+
+    await api.createLoginPairing({ name: "Workstation", platform: "windows" });
+
+    expect(fetcher).toHaveBeenCalledWith("http://localhost:4000/agent/login-pairings", {
+      method: "POST",
+      body: JSON.stringify({ name: "Workstation", platform: "windows" }),
+      headers: {
+        "content-type": "application/json"
+      }
+    });
+  });
 });

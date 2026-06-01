@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAgentLoginPayload,
   hashSecret,
+  createPairingToken,
   pairingExpiry,
   verifySecret
 } from "../src/modules/devices/device.service";
@@ -29,5 +30,9 @@ describe("device service", () => {
   it("expires pending agent login pairings quickly", () => {
     const now = new Date("2026-06-01T00:00:00.000Z");
     expect(pairingExpiry(now).toISOString()).toBe("2026-06-01T00:05:00.000Z");
+  });
+
+  it("creates pairing tokens long enough for QR login", () => {
+    expect(createPairingToken()).toHaveLength(32);
   });
 });

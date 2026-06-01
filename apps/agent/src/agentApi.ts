@@ -25,11 +25,46 @@ export type BindDeviceRequest = {
   platform: "windows" | "macos" | "unknown";
 };
 
+export type AgentDeviceRegistration = {
+  name: string;
+  platform: "windows" | "macos" | "unknown";
+};
+
+export type AgentLoginPairing = {
+  pairingToken: string;
+  expiresAt: string;
+  payload: {
+    type: "codex-transit.agent-login";
+    version: 1;
+    serverUrl: string;
+    pairingToken: string;
+  };
+};
+
+export type AgentLoginPairingStatus =
+  | { status: "pending" }
+  | { status: "expired" }
+  | { status: "claimed"; deviceId: string; token: string };
+
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 export type AgentApi = ReturnType<typeof createAgentApi>;
 
-export function createAgentApi(invoke: Invoke = tauriInvoke) {
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
+
+export function createAgentApi(invoke: Invoke = tauriInvoke, fetcher: typeof fetch = fetch) {
+  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await fetcher(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...init.headers
+      }
+    });
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    return response.json();
+  }
+
   return {
     getSettings() {
       return invoke<AgentSettings | null>("get_agent_settings");
@@ -65,6 +100,34 @@ export function createAgentApi(invoke: Invoke = tauriInvoke) {
 
     bindDevice(request: BindDeviceRequest) {
       return invoke<AgentSettings>("bind_device", { request });
+    },
+
+    async login(email: string, password: string) {
+      return request<{ token: string }>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      });
+    },
+
+    async registerLoggedInDevice(token: string, requestBody: AgentDeviceRegistration) {
+      return request<{ deviceId: string; token: string }>("/devices/agent-login/register", {
+        method: "POST",
+        body: JSON.stringify(requestBody),
+        headers: {
+          authorization: `Bearer ${token}`
+        }
+      });
+    },
+
+    async createLoginPairing(requestBody: AgentDeviceRegistration) {
+      return request<AgentLoginPairing>("/agent/login-pairings", {
+        method: "POST",
+        body: JSON.stringify(requestBody)
+      });
+    },
+
+    async getLoginPairingStatus(pairingToken: string) {
+      return request<AgentLoginPairingStatus>(`/agent/login-pairings/${pairingToken}`);
     }
   };
 }

@@ -90,6 +90,28 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
     return { deviceId: device.id };
   });
 
+  app.post("/devices/agent-login/register", async (request) => {
+    const user = await requireUser(request);
+    const body = z
+      .object({
+        name: z.string().min(1),
+        platform: z.enum(["windows", "macos", "unknown"])
+      })
+      .parse(request.body);
+    const token = createDeviceToken();
+    const device = await app.prisma.device.create({
+      data: {
+        userId: user.id,
+        name: body.name,
+        platform: body.platform,
+        tokenHash: hashSecret(token),
+        online: false
+      }
+    });
+
+    return { deviceId: device.id, token };
+  });
+
   app.get("/agent/login-pairings/:pairingToken", async (request, reply) => {
     const params = z.object({ pairingToken: z.string().min(16) }).parse(request.params);
     const pairing = await app.prisma.agentLoginPairing.findUnique({

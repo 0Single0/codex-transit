@@ -1,19 +1,22 @@
+import QRCode from "qrcode";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createAgentApi, ProjectEntry } from "./agentApi";
+import { AgentLoginPairing, createAgentApi, ProjectEntry } from "./agentApi";
 import { Locale, messages } from "./i18n";
-import { parsePairingPayload } from "./pairing";
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 export function App() {
   const api = useMemo(() => createAgentApi(), []);
   const [locale, setLocale] = useState<Locale>((localStorage.getItem("agent-locale") as Locale | null) ?? "zh");
-  const [serverUrl, setServerUrl] = useState("");
   const [deviceId, setDeviceId] = useState("");
   const [deviceToken, setDeviceToken] = useState("");
-  const [qrPayload, setQrPayload] = useState("");
-  const [bindCode, setBindCode] = useState("");
   const [deviceName, setDeviceName] = useState(
     typeof navigator === "undefined" ? "Desktop Agent" : navigator.userAgent.includes("Mac") ? "Mac Agent" : "Windows Agent"
   );
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginPairing, setLoginPairing] = useState<AgentLoginPairing | null>(null);
+  const [loginQr, setLoginQr] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [runtimeRunning, setRuntimeRunning] = useState(false);
@@ -21,7 +24,7 @@ export function App() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const configured = Boolean(serverUrl && deviceId && deviceToken);
+  const configured = Boolean(deviceId && deviceToken);
   const labels = messages[locale];
 
   function changeLocale(nextLocale: Locale) {
@@ -33,21 +36,22 @@ export function App() {
     void loadInitialState();
   }, []);
 
+  useEffect(() => {
+    if (!loginPairing || configured) return;
+    const interval = window.setInterval(() => void pollLoginPairing(loginPairing.pairingToken), 1800);
+    return () => window.clearInterval(interval);
+  }, [loginPairing?.pairingToken, configured]);
+
   async function loadInitialState() {
     setBusy(true);
     setError(null);
     try {
-      const [settings, projectList, runtimeStatus] = await Promise.all([
-        api.getSettings(),
-        api.listProjects(),
-        api.getRuntimeStatus()
-      ]);
+      const [settings, runtimeStatus] = await Promise.all([api.getSettings(), api.getRuntimeStatus()]);
       if (settings) {
-        setServerUrl(settings.serverUrl);
         setDeviceId(settings.deviceId);
         setDeviceToken(settings.deviceToken);
+        setProjects(await api.listProjects());
       }
-      setProjects(projectList);
       setRuntimeRunning(runtimeStatus.running);
     } catch (caught) {
       setError(toErrorMessage(caught));
@@ -56,37 +60,35 @@ export function App() {
     }
   }
 
-  async function saveSettings(event: FormEvent<HTMLFormElement>) {
+  async function accountLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      await api.saveSettings({ serverUrl, deviceId, deviceToken });
-      setMessage(labels.settingsSaved);
-    } catch (caught) {
-      setError(toErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function bindDevice(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const settings = await api.bindDevice({
-        serverUrl,
-        bindCode,
+      const login = await api.login(email, password);
+      const device = await api.registerLoggedInDevice(login.token, {
         name: deviceName,
         platform: detectPlatform()
       });
-      setDeviceId(settings.deviceId);
-      setDeviceToken(settings.deviceToken);
-      setBindCode("");
+      await applyAgentSettings(device.deviceId, device.token);
       setMessage(labels.paired);
+    } catch (caught) {
+      setError(labels.loginFailed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createQrLogin() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const pairing = await api.createLoginPairing({ name: deviceName, platform: detectPlatform() });
+      setLoginPairing(pairing);
+      setLoginQr(await QRCode.toDataURL(JSON.stringify(pairing.payload), { errorCorrectionLevel: "M", margin: 1, width: 220 }));
+      setMessage(labels.qrLoginCreated);
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -94,18 +96,30 @@ export function App() {
     }
   }
 
-  function applyQrPayload() {
-    setError(null);
-    setMessage(null);
-    const payload = parsePairingPayload(qrPayload.trim());
-    if (!payload) {
-      setError(labels.qrPayloadInvalid);
+  async function pollLoginPairing(pairingToken: string) {
+    try {
+      const status = await api.getLoginPairingStatus(pairingToken);
+      if (status.status === "pending") return;
+      if (status.status === "expired") {
+        setLoginPairing(null);
+        setLoginQr(null);
+        setError(labels.qrLoginExpired);
+        return;
+      }
+      await applyAgentSettings(status.deviceId, status.token);
+      setLoginPairing(null);
+      setLoginQr(null);
+      setMessage(labels.paired);
+    } catch {
       return;
     }
-    setServerUrl(payload.serverUrl);
-    setBindCode(payload.bindCode);
-    setQrPayload("");
-    setMessage(labels.qrPayloadApplied);
+  }
+
+  async function applyAgentSettings(nextDeviceId: string, nextDeviceToken: string) {
+    await api.saveSettings({ serverUrl: API_BASE, deviceId: nextDeviceId, deviceToken: nextDeviceToken });
+    setDeviceId(nextDeviceId);
+    setDeviceToken(nextDeviceToken);
+    setProjects(await api.listProjects());
   }
 
   async function addProject(event: FormEvent<HTMLFormElement>) {
@@ -188,37 +202,15 @@ export function App() {
               </select>
             </label>
             <span className={configured ? "status-pill ready" : "status-pill"}>
-              {runtimeRunning ? labels.connected : configured ? labels.configured : labels.needsSetup}
+              {runtimeRunning ? labels.connected : configured ? labels.signedIn : labels.needsSetup}
             </span>
           </div>
         </header>
 
-        <div className="layout-grid">
-          <section className="panel" aria-labelledby="settings-title">
-            <h2 id="settings-title">{labels.relayConnection}</h2>
-            <div className="form-grid">
-              <label>
-                {labels.qrPayload}
-                <textarea
-                  value={qrPayload}
-                  onChange={(event) => setQrPayload(event.target.value)}
-                  placeholder={labels.qrPayloadPlaceholder}
-                  rows={4}
-                />
-              </label>
-              <button className="secondary" disabled={busy || !qrPayload.trim()} onClick={applyQrPayload} type="button">
-                {labels.applyQrPayload}
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={bindDevice}>
-              <label>
-                {labels.pairingCode}
-                <input
-                  value={bindCode}
-                  onChange={(event) => setBindCode(event.target.value)}
-                  placeholder={labels.pairingPlaceholder}
-                />
-              </label>
+        {!configured ? (
+          <div className="layout-grid">
+            <section className="panel" aria-labelledby="agent-login-title">
+              <h2 id="agent-login-title">{labels.agentLogin}</h2>
               <label>
                 {labels.deviceName}
                 <input
@@ -227,96 +219,82 @@ export function App() {
                   placeholder={labels.deviceNamePlaceholder}
                 />
               </label>
-              <button disabled={busy || !serverUrl || !bindCode || !deviceName} type="submit">
-                {labels.pairComputer}
-              </button>
-            </form>
-            <p className="hint">{labels.manualHint}</p>
-            <form className="form-grid" onSubmit={saveSettings}>
-              <label>
-                {labels.serverUrl}
-                <input
-                  value={serverUrl}
-                  onChange={(event) => setServerUrl(event.target.value)}
-                  placeholder="http://localhost:4000"
-                  required
-                />
-              </label>
-              <label>
-                {labels.deviceId}
-                <input
-                  value={deviceId}
-                  onChange={(event) => setDeviceId(event.target.value)}
-                  placeholder="device id from pairing"
-                  required
-                />
-              </label>
-              <label>
-                {labels.deviceToken}
-                <input
-                  value={deviceToken}
-                  onChange={(event) => setDeviceToken(event.target.value)}
-                  placeholder="device token from pairing"
-                  type="password"
-                  required
-                />
-              </label>
-              <div className="actions">
-                <button disabled={busy} type="submit">
-                  {labels.save}
+              <form className="form-grid" onSubmit={accountLogin}>
+                <h2>{labels.accountLogin}</h2>
+                <label>
+                  {labels.email}
+                  <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
+                </label>
+                <label>
+                  {labels.password}
+                  <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
+                </label>
+                <button disabled={busy || !email || !password || !deviceName} type="submit">
+                  {labels.login}
                 </button>
-                <button className="secondary" disabled={busy || !configured} onClick={syncProjects} type="button">
+              </form>
+            </section>
+
+            <section className="panel" aria-labelledby="qr-login-title">
+              <h2 id="qr-login-title">{labels.qrLogin}</h2>
+              <p className="hint">{labels.qrLoginHint}</p>
+              <button className="secondary" disabled={busy || !deviceName} onClick={createQrLogin} type="button">
+                {labels.createLoginQr}
+              </button>
+              {loginQr ? (
+                <div className="login-qr">
+                  <img alt={labels.qrLogin} src={loginQr} />
+                  <span>{labels.waitingForScan}</span>
+                </div>
+              ) : null}
+            </section>
+          </div>
+        ) : (
+          <div className="layout-grid">
+            <section className="panel" aria-labelledby="project-title">
+              <h2 id="project-title">{labels.localProjects}</h2>
+              <form className="form-grid" onSubmit={addProject}>
+                <label>
+                  {labels.projectDirectory}
+                  <input
+                    value={projectPath}
+                    onChange={(event) => setProjectPath(event.target.value)}
+                    placeholder="E:\\code\\codex-transit"
+                  />
+                </label>
+                <button disabled={busy || !projectPath.trim()} type="submit">
+                  {labels.addProject}
+                </button>
+              </form>
+              {projects.length ? (
+                <ul className="project-list">
+                  {projects.map((project) => (
+                    <li className="project-row" key={project.project_id}>
+                      <span className="project-title">{project.display_name}</span>
+                      <span className="project-path">{String(project.root)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="empty-state">{labels.noProjects}</p>
+              )}
+            </section>
+
+            <section className="panel" aria-label={labels.syncProjects}>
+              <div className="actions">
+                <button className="secondary" disabled={busy} onClick={syncProjects} type="button">
                   {labels.syncProjects}
                 </button>
-                <button
-                  className="secondary"
-                  disabled={busy || !configured || runtimeRunning}
-                  onClick={startRuntime}
-                  type="button"
-                >
+                <button className="secondary" disabled={busy || runtimeRunning} onClick={startRuntime} type="button">
                   {labels.startBridge}
                 </button>
-                <button
-                  className="secondary"
-                  disabled={busy || !runtimeRunning}
-                  onClick={stopRuntime}
-                  type="button"
-                >
+                <button className="secondary" disabled={busy || !runtimeRunning} onClick={stopRuntime} type="button">
                   {labels.stopBridge}
                 </button>
               </div>
-            </form>
-          </section>
-
-          <section className="panel" aria-labelledby="project-title">
-            <h2 id="project-title">{labels.localProjects}</h2>
-            <form className="form-grid" onSubmit={addProject}>
-              <label>
-                {labels.projectDirectory}
-                <input
-                  value={projectPath}
-                  onChange={(event) => setProjectPath(event.target.value)}
-                  placeholder="E:\\code\\codex-transit"
-                />
-              </label>
-              <button disabled={busy || !projectPath.trim()} type="submit">
-                {labels.addProject}
-              </button>
-            </form>
-            {projects.length ? (
-              <ul className="project-list">
-                {projects.map((project) => (
-                  <li className="project-row" key={project.project_id}>
-                    <span className="project-title">{project.display_name}</span>
-                    <span className="project-path">{String(project.root)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="empty-state">{labels.noProjects}</p>
-            )}
-          </section>
-        </div>
+            </section>
+          </div>
+        )}
 
         {message ? <p className="message">{message}</p> : null}
         {error ? <p className="message error">{error}</p> : null}

@@ -198,6 +198,21 @@ h2 {
   font-size: 0.85rem;
 }
 
+.login-qr {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  border: 1px solid #d9d8cf;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.login-qr img {
+  width: 190px;
+  height: 190px;
+}
+
 .empty-state,
 .hint {
   margin: 0;
