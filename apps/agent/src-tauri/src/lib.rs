@@ -1,3 +1,4 @@
+pub mod agent_config;
 pub mod agent_runtime;
 pub mod codex_adapter;
 pub mod commands;
@@ -10,16 +11,17 @@ pub mod protocol;
 pub mod server_client;
 pub mod session_manager;
 
-use commands::{add_project, list_projects, AgentState};
-use project_registry::ProjectRegistry;
-use std::sync::Mutex;
+use commands::{add_project, get_agent_settings, list_projects, save_agent_settings, AgentState};
 
 pub fn run() {
     tauri::Builder::default()
-        .manage(AgentState {
-            projects: Mutex::new(ProjectRegistry::default())
-        })
-        .invoke_handler(tauri::generate_handler![add_project, list_projects])
+        .manage(AgentState::default())
+        .invoke_handler(tauri::generate_handler![
+            add_project,
+            list_projects,
+            save_agent_settings,
+            get_agent_settings
+        ])
         .plugin(tauri_plugin_shell::init())
         .run(tauri::generate_context!())
         .expect("failed to run Codex Transit Agent");

@@ -2,10 +2,23 @@ use std::{path::PathBuf, sync::Mutex};
 
 use tauri::State;
 
-use crate::project_registry::{ProjectEntry, ProjectRegistry};
+use crate::{
+    agent_config::{AgentConfig, AgentSettings},
+    project_registry::{ProjectEntry, ProjectRegistry},
+};
 
 pub struct AgentState {
-    pub projects: Mutex<ProjectRegistry>
+    pub projects: Mutex<ProjectRegistry>,
+    pub config: Mutex<AgentConfig>,
+}
+
+impl Default for AgentState {
+    fn default() -> Self {
+        Self {
+            projects: Mutex::new(ProjectRegistry::default()),
+            config: Mutex::new(AgentConfig::default()),
+        }
+    }
 }
 
 #[tauri::command]
@@ -14,7 +27,9 @@ pub fn add_project(path: String, state: State<AgentState>) -> Result<ProjectEntr
         .projects
         .lock()
         .map_err(|_| "project registry locked".to_string())?;
-    projects.add_project(PathBuf::from(path)).map_err(|error| error.to_string())
+    projects
+        .add_project(PathBuf::from(path))
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -24,4 +39,37 @@ pub fn list_projects(state: State<AgentState>) -> Result<Vec<ProjectEntry>, Stri
         .lock()
         .map_err(|_| "project registry locked".to_string())?;
     Ok(projects.list())
+}
+
+pub fn save_agent_settings_in_state(
+    state: &AgentState,
+    settings: AgentSettings,
+) -> Result<(), String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "agent config locked".to_string())?;
+    config.update(settings);
+    Ok(())
+}
+
+pub fn get_saved_agent_settings(state: &AgentState) -> Result<Option<AgentSettings>, String> {
+    let config = state
+        .config
+        .lock()
+        .map_err(|_| "agent config locked".to_string())?;
+    Ok(config.get())
+}
+
+#[tauri::command]
+pub fn save_agent_settings(
+    settings: AgentSettings,
+    state: State<AgentState>,
+) -> Result<(), String> {
+    save_agent_settings_in_state(&state, settings)
+}
+
+#[tauri::command]
+pub fn get_agent_settings(state: State<AgentState>) -> Result<Option<AgentSettings>, String> {
+    get_saved_agent_settings(&state)
 }
