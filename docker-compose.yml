@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: codex_transit
+      POSTGRES_PASSWORD: codex_transit
+      POSTGRES_DB: codex_transit
+    ports:
+      - "54321:5432"
+    volumes:
+      - codex_transit_pg:/var/lib/postgresql/data
+
+volumes:
+  codex_transit_pg:

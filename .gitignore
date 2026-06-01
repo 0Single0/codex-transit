@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.turbo/
+coverage/
+
+# env and local state
+.env
+.env.*
+!.env.example
+*.local
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# database and generated clients
+*.db
+*.sqlite
+apps/server/prisma/migrations/dev/
+
+# Tauri/Rust
+target/
+apps/agent/src-tauri/target/
+apps/agent/src-tauri/gen/
+apps/agent/src-tauri/.taurignore
+
+# local worktrees
+.worktrees/
+worktrees/
