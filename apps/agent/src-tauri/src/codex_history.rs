@@ -1,7 +1,7 @@
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use anyhow::Result;
@@ -56,15 +56,21 @@ pub fn list_codex_history_from_home(
             continue;
         }
         let parsed: SessionIndexLine = serde_json::from_str(&line)?;
+        if let Some(project_root) = &options.project_root {
+            if !session_belongs_to_project(codex_home, &parsed.id, project_root)? {
+                continue;
+            }
+        }
         sessions.push(CodexHistoryItem {
             codex_session_id: parsed.id,
-            title: parsed.thread_name.unwrap_or_else(|| "Codex 会话".to_string()),
+            title: parsed
+                .thread_name
+                .unwrap_or_else(|| "Codex 会话".to_string()),
             updated_at: parsed.updated_at,
             preview: None,
         });
     }
 
-    let _project_root = options.project_root;
     sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
     sessions.truncate(options.limit);
     Ok(sessions)
@@ -158,4 +164,58 @@ fn find_session_file_in_dir(root: &Path, codex_session_id: &str) -> Result<Optio
         }
     }
     Ok(None)
+}
+
+fn session_belongs_to_project(
+    codex_home: &Path,
+    codex_session_id: &str,
+    project_root: &Path,
+) -> Result<bool> {
+    let Some(path) = find_session_file(codex_home, codex_session_id)? else {
+        return Ok(false);
+    };
+    let Some(cwd) = read_session_cwd(&path)? else {
+        return Ok(false);
+    };
+    Ok(normalize_path(&cwd) == normalize_path(project_root))
+}
+
+fn read_session_cwd(path: &Path) -> Result<Option<PathBuf>> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if value.get("type").and_then(Value::as_str) != Some("session_meta") {
+            continue;
+        }
+        return Ok(value
+            .get("payload")
+            .and_then(|payload| payload.get("cwd"))
+            .and_then(Value::as_str)
+            .map(PathBuf::from));
+    }
+    Ok(None)
+}
+
+fn normalize_path(path: &Path) -> String {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => {
+                parts.push(prefix.as_os_str().to_string_lossy().to_string())
+            }
+            Component::RootDir | Component::CurDir => {}
+            Component::ParentDir => {
+                parts.pop();
+            }
+            Component::Normal(value) => parts.push(value.to_string_lossy().to_string()),
+        }
+    }
+    parts.join("/").replace('\\', "/").to_lowercase()
 }

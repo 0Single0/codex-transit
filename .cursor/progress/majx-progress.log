@@ -508,3 +508,18 @@
   - apps/web/src/projectSessionSelection.ts：新增项目会话打开策略 helper
   - apps/web/src/api/realtime.test.ts：补充 websocket ready 回归测试
   - .gitignore：忽略临时 Cargo target 目录
+
+[2026-06-01]
+用户输入：历史记录好像是所有项目的而不是当前项目的；发送消息后 Codex 启动失败: program not found；进入某个历史会话内对话是继续原有还是开新的。
+完成：修复当前项目历史过滤与 Agent Codex CLI 启动路径 (majx)
+  - Codex 历史列表读取 rollout 的 session_meta.cwd，只返回当前项目目录对应的历史会话
+  - Agent 默认 CodexAdapter 从 PATH 和常见 Windows 安装目录解析 codex/codex.cmd/codex.exe
+  - Windows 下优先选择 codex.cmd 并通过 cmd /C 启动，避免 GUI Agent 环境找不到 codex
+  - 确认从历史项进入后发送会携带 codexSessionId，Agent 使用 codex exec resume 继续原 Codex 会话
+
+涉及文件：
+  - apps/agent/src-tauri/src/codex_history.rs：按 session_meta.cwd 过滤当前项目历史
+  - apps/agent/src-tauri/tests/codex_history_test.rs：补充项目目录过滤回归测试
+  - apps/agent/src-tauri/src/codex_adapter.rs：解析 Codex CLI 可执行路径并包装 Windows .cmd 启动
+  - apps/agent/src-tauri/tests/codex_adapter_test.rs：补充 PATH 解析、.cmd 优先和 cmd /C 包装测试
+  - apps/agent/src-tauri/src/session_manager.rs：默认使用可解析 CodexAdapter

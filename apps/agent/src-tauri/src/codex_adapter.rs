@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use anyhow::Result;
 use tokio::{
@@ -38,6 +38,12 @@ pub struct CodexExecOptions {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CodexExecCommand {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcessInvocation {
     pub program: String,
     pub args: Vec<String>,
 }
@@ -129,8 +135,9 @@ impl CodexAdapter {
         prompt: String,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
-        let mut child = Command::new(exec.program)
-            .args(exec.args)
+        let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
+        let mut child = Command::new(invocation.program)
+            .args(invocation.args)
             .current_dir(working_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -173,6 +180,87 @@ impl CodexAdapter {
         }
 
         Ok(CodexSessionProcess { child, stdin })
+    }
+}
+
+impl Default for CodexAdapter {
+    fn default() -> Self {
+        Self::new(default_codex_command())
+    }
+}
+
+pub fn default_codex_command() -> String {
+    let path = env::var("PATH").unwrap_or_default();
+    resolve_codex_command_from_path("codex", &path, |candidate| candidate.exists())
+        .to_string_lossy()
+        .to_string()
+}
+
+pub fn resolve_codex_command_from_path(
+    command: &str,
+    path_env: &str,
+    exists: impl Fn(&PathBuf) -> bool,
+) -> PathBuf {
+    let command_path = PathBuf::from(command);
+    if command_path.components().count() > 1 || exists(&command_path) {
+        return command_path;
+    }
+
+    for directory in env::split_paths(path_env) {
+        for candidate in command_candidates(&directory, command) {
+            if exists(&candidate) {
+                return candidate;
+            }
+        }
+    }
+
+    for directory in common_codex_directories() {
+        for candidate in command_candidates(&directory, command) {
+            if exists(&candidate) {
+                return candidate;
+            }
+        }
+    }
+
+    command_path
+}
+
+fn command_candidates(directory: &std::path::Path, command: &str) -> Vec<PathBuf> {
+    if cfg!(windows) && !command.contains('.') {
+        return vec![
+            directory.join(format!("{command}.cmd")),
+            directory.join(format!("{command}.exe")),
+            directory.join(format!("{command}.ps1")),
+            directory.join(command),
+        ];
+    }
+    vec![directory.join(command)]
+}
+
+fn common_codex_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+    if cfg!(windows) {
+        if let Some(appdata) = env::var_os("APPDATA") {
+            directories.push(PathBuf::from(appdata).join("npm"));
+        }
+        directories.push(PathBuf::from("D:/nodejs"));
+        directories.push(PathBuf::from("C:/Program Files/nodejs"));
+    }
+    directories
+}
+
+pub fn prepare_command_invocation(program: PathBuf, args: Vec<String>) -> ProcessInvocation {
+    if cfg!(windows) && program.extension().and_then(|value| value.to_str()) == Some("cmd") {
+        let mut wrapped_args = vec!["/C".to_string(), program.to_string_lossy().to_string()];
+        wrapped_args.extend(args);
+        return ProcessInvocation {
+            program: "cmd".to_string(),
+            args: wrapped_args,
+        };
+    }
+    ProcessInvocation {
+        program: program.to_string_lossy().to_string(),
+        args,
     }
 }
 

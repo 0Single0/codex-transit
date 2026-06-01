@@ -1,6 +1,8 @@
 use std::{fs, path::PathBuf};
 
-use codex_transit_agent::codex_history::{list_codex_history_from_home, load_codex_history_messages_from_home, CodexHistoryListOptions};
+use codex_transit_agent::codex_history::{
+    list_codex_history_from_home, load_codex_history_messages_from_home, CodexHistoryListOptions,
+};
 
 #[test]
 fn lists_codex_history_from_session_index_newest_first() {
@@ -11,8 +13,10 @@ fn lists_codex_history_from_session_index_newest_first() {
         [
             r#"{"id":"old","thread_name":"旧会话","updated_at":"2026-06-01T08:00:00.000Z"}"#,
             r#"{"id":"new","thread_name":"新会话","updated_at":"2026-06-01T09:00:00.000Z"}"#,
-        ].join("\n"),
-    ).unwrap();
+        ]
+        .join("\n"),
+    )
+    .unwrap();
 
     let sessions = list_codex_history_from_home(
         &root,
@@ -20,11 +24,45 @@ fn lists_codex_history_from_session_index_newest_first() {
             limit: 1,
             project_root: None,
         },
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].codex_session_id, "new");
     assert_eq!(sessions[0].title, "新会话");
+}
+
+#[test]
+fn filters_codex_history_by_project_root_from_session_meta() {
+    let root = unique_temp_dir();
+    fs::create_dir_all(root.join("sessions/2026/06/01")).unwrap();
+    fs::write(
+        root.join("session_index.jsonl"),
+        [
+            r#"{"id":"project-match","thread_name":"Match","updated_at":"2026-06-01T09:00:00.000Z"}"#,
+            r#"{"id":"other-project","thread_name":"Other","updated_at":"2026-06-01T10:00:00.000Z"}"#,
+        ].join("\n"),
+    ).unwrap();
+    fs::write(
+        root.join("sessions/2026/06/01/rollout-project-match.jsonl"),
+        r#"{"timestamp":"2026-06-01T09:00:00.000Z","type":"session_meta","payload":{"id":"project-match","cwd":"C:\\work\\current"}}"#,
+    ).unwrap();
+    fs::write(
+        root.join("sessions/2026/06/01/rollout-other-project.jsonl"),
+        r#"{"timestamp":"2026-06-01T10:00:00.000Z","type":"session_meta","payload":{"id":"other-project","cwd":"C:\\work\\other"}}"#,
+    ).unwrap();
+
+    let sessions = list_codex_history_from_home(
+        &root,
+        CodexHistoryListOptions {
+            limit: 10,
+            project_root: Some(PathBuf::from("C:/work/current")),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].codex_session_id, "project-match");
 }
 
 #[test]

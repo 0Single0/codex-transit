@@ -64,7 +64,7 @@ struct SessionContext {
 
 impl SessionManager<CodexAdapter, GitDiffProvider> {
     pub fn default_codex() -> Self {
-        Self::new(CodexAdapter::new("codex"))
+        Self::new(CodexAdapter::default())
     }
 }
 
