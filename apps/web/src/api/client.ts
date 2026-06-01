@@ -1,9 +1,12 @@
-import type { DeviceSummary, LoginResponse, SessionSummary } from "@codex-transit/shared";
+import type { DeviceProjectsResponse, DeviceSummary, LoginResponse, SessionSummary } from "@codex-transit/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 export class ApiClient {
-  constructor(private token: string | null) {}
+  constructor(
+    private token: string | null,
+    private fetcher: typeof fetch = fetch
+  ) {}
 
   async login(email: string, password: string): Promise<LoginResponse> {
     return this.request("/auth/login", {
@@ -18,6 +21,17 @@ export class ApiClient {
 
   async sessions(projectId: string): Promise<SessionSummary[]> {
     return this.request(`/projects/${projectId}/sessions`);
+  }
+
+  async deviceProjects(deviceId: string): Promise<DeviceProjectsResponse> {
+    return this.request(`/devices/${deviceId}/projects`);
+  }
+
+  async createSession(deviceId: string, projectId: string, title: string): Promise<SessionSummary> {
+    return this.request("/sessions", {
+      method: "POST",
+      body: JSON.stringify({ deviceId, projectId, title })
+    });
   }
 
   async sendSessionInput(sessionId: string, text: string): Promise<{ ok: boolean }> {
@@ -43,7 +57,7 @@ export class ApiClient {
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await this.fetcher(`${API_BASE}${path}`, {
       ...init,
       headers: {
         "content-type": "application/json",

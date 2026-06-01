@@ -53,3 +53,4 @@ export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type DeviceSummary = z.infer<typeof deviceSummarySchema>;
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
+export type DeviceProjectsResponse = z.infer<typeof deviceProjectsResponseSchema>;
