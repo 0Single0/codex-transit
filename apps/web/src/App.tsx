@@ -8,6 +8,7 @@ import { SessionConsole } from "./components/SessionConsole";
 import { SessionListView } from "./components/SessionListView";
 import { Locale, messages } from "./i18n";
 import { parseAgentLoginPayload } from "./pairing";
+import { openSessionNavigation } from "./sessionNavigation";
 
 type Tab = "devices" | "sessions" | "me";
 
@@ -125,8 +126,13 @@ export function App() {
     const session = await runAuthorized(() => api.createSession(selectedDevice.id, selectedProject.projectId, title));
     if (!session) return;
     setSessions((current) => [session, ...current]);
-    setSelectedSessionId(session.id);
-    setActiveTab("sessions");
+    openSession(session);
+  }
+
+  function openSession(session: SessionSummary) {
+    const navigation = openSessionNavigation(session);
+    setSelectedSessionId(navigation.selectedSessionId);
+    setActiveTab(navigation.activeTab);
   }
 
   return (
@@ -186,7 +192,7 @@ export function App() {
           sessions={sessions}
           onBack={() => setSelectedProject(null)}
           onCreate={createSession}
-          onSelect={(session) => setSelectedSessionId(session.id)}
+          onSelect={openSession}
         />
       ) : null}
       {token && activeTab === "sessions" && !selectedSessionId ? (

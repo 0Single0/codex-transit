@@ -418,3 +418,19 @@
   - apps/web/src/api/client.test.ts：覆盖 axios 错误状态码传递
   - apps/web/src/App.tsx：统一处理登录过期并自动刷新/清理旧 token
   - apps/web/src/i18n.ts：新增登录过期中英文文案
+
+[2026-06-01]
+用户输入：现在可以点进去了，但是为什么不能输入内容？问问题那种
+完成：修复历史会话进入后无法看到输入区的问题 (majx)
+  - 点击历史会话时同步切换到底部“会话”导航，直接打开控制台输入区
+  - 会话输入框新增中文/英文占位提示，明确可以向 Codex 提问或下发修改任务
+  - 发送失败时显示 Agent 离线或发送失败提示，避免用户误以为输入无响应
+
+涉及文件：
+  - apps/web/src/App.tsx：历史会话选择后进入会话控制台
+  - apps/web/src/sessionNavigation.ts：抽出会话导航状态 helper
+  - apps/web/src/sessionNavigation.test.ts：覆盖历史会话打开控制台的导航行为
+  - apps/web/src/components/SessionConsole.tsx：输入框提示和发送失败提示
+  - apps/web/src/api/client.ts：保留服务端错误码
+  - apps/web/src/api/client.test.ts：覆盖错误码传递
+  - apps/web/src/i18n.ts：补充输入和发送失败文案

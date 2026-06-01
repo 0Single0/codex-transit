@@ -15,7 +15,8 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 export class ApiError extends Error {
   constructor(
     message: string,
-    readonly status?: number
+    readonly status?: number,
+    readonly code?: string
   ) {
     super(message);
     this.name = "ApiError";
@@ -127,7 +128,7 @@ export class ApiClient {
 
 function readApiError(error: unknown) {
   if (!isAxiosErrorWithData(error)) return error instanceof Error ? error : new Error(String(error));
-  return new ApiError(readAxiosErrorMessage(error), error.response?.status);
+  return new ApiError(readAxiosErrorMessage(error), error.response?.status, error.response?.data?.error);
 }
 
 function readAxiosErrorMessage(error: unknown) {

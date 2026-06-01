@@ -26,6 +26,7 @@ export function SessionConsole(props: {
   const [diffs, setDiffs] = useState<DiffPreview[]>([]);
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [prompt, setPrompt] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -81,12 +82,27 @@ export function SessionConsole(props: {
           event.preventDefault();
           if (!prompt.trim()) return;
           const text = prompt;
-          await props.onSend(text);
+          setSendError(null);
+          try {
+            await props.onSend(text);
+          } catch (caught) {
+            const message = caught instanceof Error && caught.message.includes("agent_offline")
+              ? props.labels.agentOffline
+              : props.labels.sendFailed;
+            setSendError(message);
+            return;
+          }
           setMessages((current) => [...current, { role: "user", text }]);
           setPrompt("");
         }}
       >
-        <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+        <textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder={props.labels.promptPlaceholder}
+          rows={5}
+        />
+        {sendError ? <p className="error">{sendError}</p> : null}
         <button type="submit">{props.labels.send}</button>
         <button type="button" className="secondary" onClick={props.onStart}>
           {props.labels.startSession}

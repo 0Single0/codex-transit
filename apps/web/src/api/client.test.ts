@@ -119,7 +119,8 @@ describe("ApiClient", () => {
 
     await expect(api.devices()).rejects.toMatchObject({
       message: "invalid_token",
-      status: 401
+      status: 401,
+      code: "invalid_token"
     } satisfies Partial<ApiError>);
   });
 });
