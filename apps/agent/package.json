@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "lint": "cargo check --manifest-path src-tauri/Cargo.toml",
-    "test": "cargo test --manifest-path src-tauri/Cargo.toml --lib --tests --jobs 1",
-    "typecheck": "cargo check --manifest-path src-tauri/Cargo.toml"
+    "lint": "pnpm typecheck",
+    "test": "vitest run --passWithNoTests && cargo test --manifest-path src-tauri/Cargo.toml --lib --tests --jobs 1",
+    "typecheck": "tsc -p tsconfig.json --noEmit && cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.2.0",
     "@types/react": "^18.3.16",
-    "@types/react-dom": "^18.3.5"
+    "@types/react-dom": "^18.3.5",
+    "vitest": "^2.1.8"
   }
 }
