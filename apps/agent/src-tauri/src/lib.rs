@@ -6,6 +6,7 @@ pub mod path_guard;
 pub mod project_registry;
 pub mod protocol;
 pub mod server_client;
+pub mod session_manager;
 
 use commands::{add_project, list_projects, AgentState};
 use project_registry::ProjectRegistry;

@@ -7,7 +7,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "lint": "cargo check --manifest-path src-tauri/Cargo.toml",
-    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml --lib --tests --jobs 1",
     "typecheck": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
