@@ -23,6 +23,18 @@ pub fn append_trace_line(session_id: Uuid, line: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+pub fn ensure_trace_console(session_id: Uuid) -> Result<PathBuf> {
+    let path = session_log_path(session_id);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if !path.exists() {
+        OpenOptions::new().create(true).append(true).open(&path)?;
+    }
+    maybe_open_trace_console(session_id, &path)?;
+    Ok(path)
+}
+
 pub fn maybe_open_trace_console(session_id: Uuid, log_path: &Path) -> Result<()> {
     #[cfg(windows)]
     {

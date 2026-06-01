@@ -5,6 +5,12 @@ import { connectSessionStream } from "../api/realtime";
 import { buildConversationItems } from "../conversationItems";
 import type { WebMessages } from "../i18n";
 
+type PendingMessage = {
+  id: string;
+  role: "user";
+  text: string;
+};
+
 export function SessionConsole(props: {
   labels: WebMessages;
   token: string;
@@ -24,14 +30,20 @@ export function SessionConsole(props: {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [isWaitingResponse, setIsWaitingResponse] = useState(false);
   const [lastSendAt, setLastSendAt] = useState<number | null>(null);
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const timeoutHandle = useRef<number | null>(null);
+  const waitingStartAt = useRef<number | null>(null);
   const conversation = useMemo(() => buildConversationItems([], output), [output]);
   const historyConversation = props.historyMessages.map((message) => ({
     id: message.id,
     role: message.role === "user" ? "user" as const : "codex" as const,
     text: message.text
   }));
-  const visibleConversation = historyConversation.length ? [...historyConversation, ...conversation] : conversation;
+  const visibleConversation = [
+    ...historyConversation,
+    ...pendingMessages,
+    ...conversation
+  ];
 
   useEffect(() => {
     let mounted = true;
@@ -53,6 +65,7 @@ export function SessionConsole(props: {
             timeoutHandle.current = null;
           }
           setIsWaitingResponse(false);
+          setPendingMessages([]);
           setOutput((current) => [...current, event]);
         }
       }
@@ -96,7 +109,7 @@ export function SessionConsole(props: {
       <div className="mt-4 min-h-0 space-y-4 overflow-y-auto pb-4 pr-1">
         {isWaitingResponse ? (
           <div className="rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
-            已发送，正在等待 Codex 输出...
+            正在等待 Codex 输出...
           </div>
         ) : null}
         {visibleConversation.length ? (
@@ -135,17 +148,21 @@ export function SessionConsole(props: {
           setSendError(null);
           setIsSending(true);
           setPrompt("");
+          setPendingMessages((current) => [
+            ...current,
+            { id: `pending-${Date.now()}`, role: "user", text }
+          ]);
           try {
             await props.onSend(text);
             setLastSendAt(Date.now());
             setIsWaitingResponse(true);
+            waitingStartAt.current = Date.now();
             if (timeoutHandle.current) {
               window.clearTimeout(timeoutHandle.current);
             }
             timeoutHandle.current = window.setTimeout(() => {
-              setIsWaitingResponse(false);
-              setSendError("消息已发送，但超时未收到 Codex 输出，请检查 Agent 在线状态。");
-            }, 15000);
+              setSendError("消息已发送，暂未收到 Codex 输出，仍在等待中。");
+            }, 45000);
           } catch (caught) {
             const message = caught instanceof Error && caught.message.includes("agent_offline")
               ? props.labels.agentOffline
@@ -180,6 +197,11 @@ export function SessionConsole(props: {
         </div>
         {sendError ? <p className="px-2 pb-1 text-sm text-red-300">{sendError}</p> : null}
         {lastSendAt ? <p className="px-2 pb-1 text-[11px] text-slate-500">最后发送时间: {new Date(lastSendAt).toLocaleTimeString()}</p> : null}
+        {isWaitingResponse && waitingStartAt.current ? (
+          <p className="px-2 pb-1 text-[11px] text-slate-500">
+            已等待: {Math.max(1, Math.floor((Date.now() - waitingStartAt.current) / 1000))}s
+          </p>
+        ) : null}
       </form>
     </section>
   );

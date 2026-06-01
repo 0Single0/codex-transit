@@ -2,7 +2,7 @@ use std::{env, path::PathBuf};
 
 use anyhow::{Context, Result};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncReadExt, AsyncWriteExt},
     process::{Child, ChildStdin, Command},
     sync::mpsc,
 };
@@ -156,13 +156,21 @@ impl CodexAdapter {
         if let Some(stdout) = child.stdout.take() {
             let tx = output_tx.clone();
             tokio::spawn(async move {
-                let mut lines = BufReader::new(stdout).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
+                let mut stdout = stdout;
+                let mut buffer = vec![0_u8; 4096];
+                loop {
+                    let Ok(read) = stdout.read(&mut buffer).await else {
+                        break;
+                    };
+                    if read == 0 {
+                        break;
+                    }
+                    let text = String::from_utf8_lossy(&buffer[..read]).to_string();
                     let _ = tx
                         .send(ProcessOutput {
                             session_id,
                             stream: OutputStream::Stdout,
-                            text: line,
+                            text,
                         })
                         .await;
                 }
@@ -171,13 +179,21 @@ impl CodexAdapter {
         if let Some(stderr) = child.stderr.take() {
             let tx = output_tx;
             tokio::spawn(async move {
-                let mut lines = BufReader::new(stderr).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
+                let mut stderr = stderr;
+                let mut buffer = vec![0_u8; 4096];
+                loop {
+                    let Ok(read) = stderr.read(&mut buffer).await else {
+                        break;
+                    };
+                    if read == 0 {
+                        break;
+                    }
+                    let text = String::from_utf8_lossy(&buffer[..read]).to_string();
                     let _ = tx
                         .send(ProcessOutput {
                             session_id,
                             stream: OutputStream::Stderr,
-                            text: line,
+                            text,
                         })
                         .await;
                 }
@@ -233,8 +249,8 @@ pub fn resolve_codex_command_from_path(
 fn command_candidates(directory: &std::path::Path, command: &str) -> Vec<PathBuf> {
     if cfg!(windows) && !command.contains('.') {
         return vec![
-            directory.join(format!("{command}.cmd")),
             directory.join(format!("{command}.exe")),
+            directory.join(format!("{command}.cmd")),
             directory.join(format!("{command}.ps1")),
             directory.join(command),
         ];
@@ -307,6 +323,15 @@ pub fn format_error_chain(error: &anyhow::Error) -> String {
         parts.push(cause.to_string());
     }
     parts.join(" | caused by: ")
+}
+
+pub fn describe_invocation(invocation: &ProcessInvocation, cwd: &std::path::Path) -> String {
+    format!(
+        "program={} args=[{}] cwd={}",
+        invocation.program,
+        invocation.args.join(" "),
+        cwd.to_string_lossy()
+    )
 }
 
 impl CodexSessionProcess {
