@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codexOutputChunkSchema, fileChangedSchema, realtimeEventSchema } from "./events";
+import { codexHistoryDetailResultSchema, codexHistoryRequestSchema, codexHistoryResultSchema, codexOutputChunkSchema, fileChangedSchema, realtimeEventSchema } from "./events";
 
 const base = {
   eventId: "00000000-0000-4000-8000-000000000001",
@@ -42,5 +42,48 @@ describe("realtime event schemas", () => {
     });
 
     expect(parsed.type).toBe("session.input");
+  });
+
+  it("parses codex history request and result events", () => {
+    const request = codexHistoryRequestSchema.parse({
+      ...base,
+      type: "codex.history.request",
+      requestId: "00000000-0000-4000-8000-000000000010",
+      limit: 20
+    });
+    const result = codexHistoryResultSchema.parse({
+      ...base,
+      type: "codex.history.result",
+      requestId: request.requestId,
+      ok: true,
+      sessions: [
+        {
+          codexSessionId: "019e8268-8f45-7422-aff8-5524d4c6990b",
+          title: "查看对话代理历史跳转逻辑",
+          updatedAt: "2026-06-01T08:59:41.440Z"
+        }
+      ]
+    });
+
+    expect(result.sessions[0]?.codexSessionId).toBe("019e8268-8f45-7422-aff8-5524d4c6990b");
+  });
+
+  it("parses codex history detail result events with messages", () => {
+    const result = codexHistoryDetailResultSchema.parse({
+      ...base,
+      type: "codex.history.detail.result",
+      requestId: "00000000-0000-4000-8000-000000000010",
+      codexSessionId: "019e8268-8f45-7422-aff8-5524d4c6990b",
+      ok: true,
+      messages: [
+        {
+          id: "message-1",
+          role: "user",
+          text: "继续"
+        }
+      ]
+    });
+
+    expect(result.messages[0]?.text).toBe("继续");
   });
 });

@@ -28,3 +28,25 @@ fn builds_codex_exec_command_with_project_and_prompt_stdin() {
         ]
     );
 }
+
+#[test]
+fn builds_codex_exec_resume_command_for_history_session() {
+    let adapter = CodexAdapter::new("codex");
+    let command = adapter.build_resume_command(
+        PathBuf::from("C:/work/project"),
+        "019e8268-8f45-7422-aff8-5524d4c6990b",
+        CodexExecOptions::default(),
+    );
+
+    assert_eq!(command.program, "codex");
+    assert_eq!(
+        command.args,
+        vec![
+            "exec",
+            "resume",
+            "--skip-git-repo-check",
+            "019e8268-8f45-7422-aff8-5524d4c6990b",
+            "-"
+        ]
+    );
+}

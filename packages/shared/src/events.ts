@@ -11,7 +11,8 @@ export const baseEventSchema = z.object({
 
 export const sessionBaseSchema = baseEventSchema.extend({
   projectId: uuidSchema,
-  sessionId: uuidSchema
+  sessionId: uuidSchema,
+  codexSessionId: z.string().min(1).optional()
 });
 
 export const agentOnlineSchema = baseEventSchema.extend({
@@ -84,6 +85,50 @@ export const diffResultSchema = sessionBaseSchema.extend({
   error: z.string().optional()
 });
 
+export const codexHistoryItemSchema = z.object({
+  codexSessionId: z.string().min(1),
+  title: z.string().min(1),
+  updatedAt: z.string().datetime(),
+  preview: z.string().optional()
+});
+
+export const codexHistoryMessageSchema = z.object({
+  id: z.string().min(1),
+  role: z.enum(["user", "assistant"]),
+  text: z.string().min(1),
+  createdAt: z.string().datetime().optional()
+});
+
+export const codexHistoryRequestSchema = baseEventSchema.extend({
+  type: z.literal("codex.history.request"),
+  requestId: uuidSchema,
+  projectId: uuidSchema.optional(),
+  limit: z.number().int().positive().max(100).default(30)
+});
+
+export const codexHistoryDetailRequestSchema = baseEventSchema.extend({
+  type: z.literal("codex.history.detail.request"),
+  requestId: uuidSchema,
+  codexSessionId: z.string().min(1)
+});
+
+export const codexHistoryResultSchema = baseEventSchema.extend({
+  type: z.literal("codex.history.result"),
+  requestId: uuidSchema,
+  ok: z.boolean(),
+  sessions: z.array(codexHistoryItemSchema),
+  error: z.string().optional()
+});
+
+export const codexHistoryDetailResultSchema = baseEventSchema.extend({
+  type: z.literal("codex.history.detail.result"),
+  requestId: uuidSchema,
+  codexSessionId: z.string().min(1),
+  ok: z.boolean(),
+  messages: z.array(codexHistoryMessageSchema),
+  error: z.string().optional()
+});
+
 export const errorEventSchema = baseEventSchema.extend({
   type: z.literal("error.event"),
   code: z.string().min(1),
@@ -102,6 +147,10 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
   fileChangedSchema,
   diffRequestSchema,
   diffResultSchema,
+  codexHistoryRequestSchema,
+  codexHistoryDetailRequestSchema,
+  codexHistoryResultSchema,
+  codexHistoryDetailResultSchema,
   errorEventSchema
 ]);
 
@@ -109,3 +158,5 @@ export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
 export type CodexOutputChunk = z.infer<typeof codexOutputChunkSchema>;
 export type FileChangedEvent = z.infer<typeof fileChangedSchema>;
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
+export type CodexHistoryItem = z.infer<typeof codexHistoryItemSchema>;
+export type CodexHistoryMessage = z.infer<typeof codexHistoryMessageSchema>;

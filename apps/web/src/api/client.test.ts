@@ -41,6 +41,56 @@ describe("ApiClient", () => {
     });
   });
 
+  it("requests Codex history from a selected device", async () => {
+    const http = createHttpMock({ ok: true, requestId: "request-1" });
+    const api = new ApiClient("token", http);
+
+    await api.requestCodexHistory("device-1", "project-1", 20);
+
+    expect(http.request).toHaveBeenCalledWith({
+      url: "/devices/device-1/codex-history",
+      method: "POST",
+      data: { projectId: "project-1", limit: 20 },
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
+
+  it("requests Codex history details from a selected device", async () => {
+    const http = createHttpMock({ ok: true, requestId: "request-1" });
+    const api = new ApiClient("token", http);
+
+    await api.requestCodexHistoryDetail("device-1", "codex-session-1");
+
+    expect(http.request).toHaveBeenCalledWith({
+      url: "/devices/device-1/codex-history/codex-session-1",
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
+
+  it("sends session input with a Codex resume session id", async () => {
+    const http = createHttpMock({ ok: true });
+    const api = new ApiClient("token", http);
+
+    await api.sendSessionInput("session-1", "continue", "codex-session-1");
+
+    expect(http.request).toHaveBeenCalledWith({
+      url: "/sessions/session-1/input",
+      method: "POST",
+      data: { text: "continue", codexSessionId: "codex-session-1" },
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
+
   it("claims Agent login QR pairings for the signed in user", async () => {
     const http = createHttpMock({ deviceId: "device-1" });
     const api = new ApiClient("token", http);

@@ -51,7 +51,8 @@ export function buildStartAndInputEvents(
   clock = {
     eventId: cryptoRandomId,
     now: () => new Date().toISOString()
-  }
+  },
+  codexSessionId?: string
 ) {
   const base = buildSessionRealtimeBase(session);
   return [
@@ -66,9 +67,58 @@ export function buildStartAndInputEvents(
       eventId: clock.eventId(),
       timestamp: clock.now(),
       ...base,
+      ...(codexSessionId ? { codexSessionId } : {}),
       text
     }
   ];
+}
+
+export function buildCodexHistoryRequestEvent(
+  input: {
+    userId: string;
+    deviceId: string;
+    projectId?: string;
+    limit?: number;
+  },
+  clock = {
+    eventId: cryptoRandomId,
+    now: () => new Date().toISOString()
+  }
+) {
+  const requestId = clock.eventId();
+  return {
+    type: "codex.history.request",
+    eventId: requestId,
+    requestId,
+    timestamp: clock.now(),
+    userId: input.userId,
+    deviceId: input.deviceId,
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+    limit: input.limit ?? 30
+  };
+}
+
+export function buildCodexHistoryDetailRequestEvent(
+  input: {
+    userId: string;
+    deviceId: string;
+    codexSessionId: string;
+  },
+  clock = {
+    eventId: cryptoRandomId,
+    now: () => new Date().toISOString()
+  }
+) {
+  const requestId = clock.eventId();
+  return {
+    type: "codex.history.detail.request",
+    eventId: requestId,
+    requestId,
+    timestamp: clock.now(),
+    userId: input.userId,
+    deviceId: input.deviceId,
+    codexSessionId: input.codexSessionId
+  };
 }
 
 function cryptoRandomId() {

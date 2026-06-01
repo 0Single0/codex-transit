@@ -43,15 +43,29 @@ export async function registerRealtimeGateway(app: FastifyInstance) {
     if (query.role === "viewer") {
       const payload = app.jwt.verify<{ sub: string; email?: string }>(query.token);
       userId = payload.sub;
-      if (!query.sessionId) throw new Error("sessionId_required");
-      connectionRegistry.addViewer(query.sessionId, socket);
-      socket.on("close", () => connectionRegistry.removeViewer(query.sessionId!, socket));
+      if (query.sessionId) {
+        connectionRegistry.addViewer(query.sessionId, socket);
+        socket.on("close", () => connectionRegistry.removeViewer(query.sessionId!, socket));
+      } else if (query.deviceId) {
+        const device = await app.prisma.device.findFirst({ where: { id: query.deviceId, userId } });
+        if (!device) {
+          socket.close(1008, "device_not_found");
+          return;
+        }
+        connectionRegistry.addDeviceViewer(query.deviceId, socket);
+        socket.on("close", () => connectionRegistry.removeDeviceViewer(query.deviceId!, socket));
+      } else {
+        throw new Error("sessionId_or_deviceId_required");
+      }
     }
 
     socket.on("message", async (raw: Buffer) => {
       const event = realtimeEventSchema.parse(JSON.parse(raw.toString()));
       if ("sessionId" in event) {
         connectionRegistry.broadcastToSession(event.sessionId, event);
+      }
+      if (event.type === "codex.history.result" || event.type === "codex.history.detail.result") {
+        connectionRegistry.broadcastToDeviceViewers(event.deviceId, event);
       }
       if (event.type === "codex.output.chunk") {
         await app.prisma.terminalOutputChunk.upsert({

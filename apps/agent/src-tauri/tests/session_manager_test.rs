@@ -24,6 +24,7 @@ const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000004";
 struct RunnerState {
     started_dirs: Vec<PathBuf>,
     started_prompts: Vec<String>,
+    resumed_sessions: Vec<String>,
     inputs: HashMap<Uuid, Vec<String>>,
     stopped: Vec<Uuid>,
 }
@@ -65,6 +66,25 @@ impl SessionProcessRunner for FakeRunner {
             state: self.state.clone(),
         })
     }
+
+    async fn resume_session(
+        &self,
+        session_id: Uuid,
+        working_dir: PathBuf,
+        codex_session_id: String,
+        prompt: String,
+        _output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<Self::Process> {
+        let mut state = self.state.lock().unwrap();
+        state.started_dirs.push(working_dir);
+        state.resumed_sessions.push(codex_session_id);
+        state.started_prompts.push(prompt);
+        drop(state);
+        Ok(FakeProcess {
+            session_id,
+            state: self.state.clone(),
+        })
+    }
 }
 
 impl SessionProcessRunner for FailingRunner {
@@ -74,6 +94,17 @@ impl SessionProcessRunner for FailingRunner {
         &self,
         _session_id: Uuid,
         _working_dir: PathBuf,
+        _prompt: String,
+        _output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<Self::Process> {
+        anyhow::bail!("codex executable not found");
+    }
+
+    async fn resume_session(
+        &self,
+        _session_id: Uuid,
+        _working_dir: PathBuf,
+        _codex_session_id: String,
         _prompt: String,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
@@ -106,6 +137,7 @@ fn start_event() -> RealtimeEvent {
         device_id: DEVICE_ID.parse().unwrap(),
         project_id: PROJECT_ID.parse().unwrap(),
         session_id: SESSION_ID.parse().unwrap(),
+        codex_session_id: None,
     }
 }
 
@@ -206,6 +238,38 @@ async fn starts_codex_for_each_input_prompt() {
 }
 
 #[tokio::test]
+async fn resumes_codex_history_for_bound_session_input() {
+    let runner = FakeRunner::default();
+    let state = runner.state.clone();
+    let mut manager = SessionManager::new(runner);
+    let session_id = SESSION_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.handle_event(start_event()).await.unwrap();
+    manager
+        .handle_event(RealtimeEvent::SessionInput {
+            event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
+            timestamp: "2026-06-01T00:00:01.000Z".to_string(),
+            user_id: USER_ID.parse().unwrap(),
+            device_id: DEVICE_ID.parse().unwrap(),
+            project_id,
+            session_id,
+            codex_session_id: Some("019e8268-8f45-7422-aff8-5524d4c6990b".to_string()),
+            text: "continue this".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let state = state.lock().unwrap();
+    assert_eq!(
+        state.resumed_sessions,
+        vec!["019e8268-8f45-7422-aff8-5524d4c6990b".to_string()]
+    );
+    assert_eq!(state.started_prompts, vec!["continue this".to_string()]);
+}
+
+#[tokio::test]
 async fn reports_codex_start_failures_as_output() {
     let mut manager = SessionManager::new(FailingRunner);
     let session_id = SESSION_ID.parse().unwrap();
@@ -247,6 +311,7 @@ async fn handles_start_and_input_events() {
             device_id: DEVICE_ID.parse().unwrap(),
             project_id,
             session_id,
+            codex_session_id: None,
             text: "implement it".to_string(),
         })
         .await
@@ -363,6 +428,7 @@ async fn stop_event_stops_and_removes_running_session() {
             device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
             project_id,
             session_id,
+            codex_session_id: None,
         })
         .await
         .unwrap();

@@ -1,7 +1,8 @@
-import type { DeviceSummary, ProjectSummary, SessionSummary } from "@codex-transit/shared";
+import type { CodexHistoryItem, CodexHistoryMessage, DeviceSummary, ProjectSummary, RealtimeEvent, SessionSummary } from "@codex-transit/shared";
 import { Bell, ChevronLeft, Languages, Menu, MonitorSmartphone, Settings, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ApiClient, ApiError } from "./api/client";
+import { connectDeviceStream } from "./api/realtime";
 import { DeviceListView } from "./components/DeviceListView";
 import { LoginView } from "./components/LoginView";
 import { ProjectListView } from "./components/ProjectListView";
@@ -19,6 +20,10 @@ export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [codexHistory, setCodexHistory] = useState<CodexHistoryItem[]>([]);
+  const [codexHistoryMessages, setCodexHistoryMessages] = useState<CodexHistoryMessage[]>([]);
+  const [activeCodexSessionId, setActiveCodexSessionId] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("devices");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -40,6 +45,10 @@ export function App() {
     setProjects([]);
     setSelectedProject(null);
     setSessions([]);
+    setCodexHistory([]);
+    setCodexHistoryMessages([]);
+    setActiveCodexSessionId(null);
+    setHistoryLoading(false);
     setSelectedSessionId(null);
     setActiveTab("devices");
     setHistoryOpen(false);
@@ -91,6 +100,10 @@ export function App() {
     setSelectedProject(null);
     setSelectedSessionId(null);
     setHistoryOpen(false);
+    setCodexHistory([]);
+    setCodexHistoryMessages([]);
+    setActiveCodexSessionId(null);
+    setHistoryLoading(false);
     const response = await runAuthorized(() => api.deviceProjects(device.id));
     if (!response) return;
     setProjects(response.projects);
@@ -99,6 +112,9 @@ export function App() {
   async function selectProject(project: ProjectSummary) {
     setSelectedProject(project);
     setHistoryOpen(false);
+    setCodexHistory([]);
+    setCodexHistoryMessages([]);
+    setActiveCodexSessionId(null);
     const projectSessions = await runAuthorized(() => api.sessions(project.projectId));
     if (!projectSessions) return;
     setSessions(projectSessions);
@@ -112,6 +128,82 @@ export function App() {
   async function createSessionForProject(project: ProjectSummary, title = project.displayName) {
     if (!selectedDevice) return;
     const session = await runAuthorized(() => api.createSession(selectedDevice.id, project.projectId, title));
+    if (!session) return;
+    setSessions((current) => [session, ...current]);
+    openSession(session);
+  }
+
+  async function openCodexHistory() {
+    if (!token || !selectedDevice || !selectedProject) return;
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setError(null);
+    const closeStream = connectDeviceStream({
+      token,
+      deviceId: selectedDevice.id,
+      onEvent(event: RealtimeEvent) {
+        if (event.type !== "codex.history.result") return;
+        setHistoryLoading(false);
+        if (event.ok) {
+          setCodexHistory(event.sessions);
+        } else {
+          setError(event.error ?? labels.historyLoadFailed);
+        }
+        closeStream();
+      }
+    });
+    const request = await runAuthorized(() => api.requestCodexHistory(selectedDevice.id, selectedProject.projectId, 50));
+    if (!request) {
+      closeStream();
+      setHistoryLoading(false);
+      return;
+    }
+    window.setTimeout(() => {
+      setHistoryLoading((current) => {
+        if (current) {
+          closeStream();
+          setError(labels.historyLoadFailed);
+        }
+        return false;
+      });
+    }, 8000);
+  }
+
+  async function openCodexHistoryItem(item: CodexHistoryItem) {
+    if (!token || !selectedDevice || !selectedProject) return;
+    setHistoryLoading(true);
+    setError(null);
+    const closeStream = connectDeviceStream({
+      token,
+      deviceId: selectedDevice.id,
+      onEvent(event: RealtimeEvent) {
+        if (event.type !== "codex.history.detail.result" || event.codexSessionId !== item.codexSessionId) return;
+        setHistoryLoading(false);
+        closeStream();
+        if (!event.ok) {
+          setError(event.error ?? labels.historyLoadFailed);
+          return;
+        }
+        setCodexHistoryMessages(event.messages);
+        setActiveCodexSessionId(item.codexSessionId);
+        void openOrCreateTransitSessionForHistory(item);
+      }
+    });
+    const request = await runAuthorized(() => api.requestCodexHistoryDetail(selectedDevice.id, item.codexSessionId));
+    if (!request) {
+      closeStream();
+      setHistoryLoading(false);
+    }
+  }
+
+  async function openOrCreateTransitSessionForHistory(item: CodexHistoryItem) {
+    if (!selectedDevice || !selectedProject) return;
+    const existing = sessions.find((session) => session.title === item.title);
+    if (existing) {
+      openSession(existing);
+      return;
+    }
+    const session = await runAuthorized(() => api.createSession(selectedDevice.id, selectedProject.projectId, item.title));
     if (!session) return;
     setSessions((current) => [session, ...current]);
     openSession(session);
@@ -132,6 +224,10 @@ export function App() {
     setProjects([]);
     setSelectedProject(null);
     setSessions([]);
+    setCodexHistory([]);
+    setCodexHistoryMessages([]);
+    setActiveCodexSessionId(null);
+    setHistoryLoading(false);
     setSelectedSessionId(null);
     setHistoryOpen(false);
     setActiveTab("devices");
@@ -161,7 +257,13 @@ export function App() {
         ) : null}
 
         {token && activeTab === "devices" && selectedProject && historyOpen ? (
-          <HistoryView labels={labels} sessions={sessions} onBack={() => setHistoryOpen(false)} onSelect={openSession} />
+          <HistoryView
+            labels={labels}
+            history={codexHistory}
+            loading={historyLoading}
+            onBack={() => setHistoryOpen(false)}
+            onSelect={openCodexHistoryItem}
+          />
         ) : null}
 
         {token && activeTab === "devices" && selectedProject && selectedSessionId && !historyOpen ? (
@@ -178,9 +280,10 @@ export function App() {
               setSelectedProject(null);
               setHistoryOpen(false);
             }}
-            onHistory={() => setHistoryOpen(true)}
+            onHistory={openCodexHistory}
+            historyMessages={codexHistoryMessages}
             onSend={async (text) => {
-              await runAuthorized(() => api.sendSessionInput(selectedSessionId, text));
+              await runAuthorized(() => api.sendSessionInput(selectedSessionId, text, activeCodexSessionId ?? undefined));
             }}
           />
         ) : null}
@@ -218,9 +321,10 @@ function MobileHeader(props: { labels: typeof messages.zh; onRefresh: () => void
 
 function HistoryView(props: {
   labels: typeof messages.zh;
-  sessions: SessionSummary[];
+  history: CodexHistoryItem[];
+  loading: boolean;
   onBack: () => void;
-  onSelect: (session: SessionSummary) => void;
+  onSelect: (item: CodexHistoryItem) => void;
 }) {
   return (
     <section className="min-h-[calc(100vh-32px)] px-5 pb-28 pt-4 text-white">
@@ -235,15 +339,26 @@ function HistoryView(props: {
         {props.labels.historyHint}
       </p>
       <div className="mt-4 space-y-3">
-        {props.sessions.map((session) => (
+        {props.loading ? (
+          <div className="rounded-[22px] border border-white/10 bg-[#101822] px-4 py-6 text-center text-sm text-slate-400">
+            {props.labels.loadingHistory}
+          </div>
+        ) : null}
+        {!props.loading && !props.history.length ? (
+          <div className="rounded-[22px] border border-white/10 bg-[#101822] px-4 py-6 text-center text-sm text-slate-400">
+            {props.labels.noCodexHistory}
+          </div>
+        ) : null}
+        {props.history.map((item) => (
           <button
             className="w-full rounded-[22px] border border-white/10 bg-[#101822] px-4 py-4 text-left"
-            key={session.id}
-            onClick={() => props.onSelect(session)}
+            key={item.codexSessionId}
+            onClick={() => props.onSelect(item)}
             type="button"
           >
-            <strong className="block truncate text-sm font-semibold">{session.title}</strong>
-            <span className="mt-1 block text-xs text-slate-500">{new Date(session.updatedAt).toLocaleString()}</span>
+            <strong className="block truncate text-sm font-semibold">{item.title}</strong>
+            <span className="mt-1 block text-xs text-slate-500">{new Date(item.updatedAt).toLocaleString()}</span>
+            {item.preview ? <span className="mt-2 line-clamp-2 block text-xs leading-5 text-slate-400">{item.preview}</span> : null}
           </button>
         ))}
       </div>

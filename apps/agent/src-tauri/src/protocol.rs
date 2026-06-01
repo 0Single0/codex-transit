@@ -11,7 +11,8 @@ pub enum RealtimeEvent {
         user_id: Uuid,
         device_id: Uuid,
         project_id: Uuid,
-        session_id: Uuid
+        session_id: Uuid,
+        codex_session_id: Option<String>
     },
     #[serde(rename = "session.input", rename_all = "camelCase")]
     SessionInput {
@@ -21,6 +22,7 @@ pub enum RealtimeEvent {
         device_id: Uuid,
         project_id: Uuid,
         session_id: Uuid,
+        codex_session_id: Option<String>,
         text: String
     },
     #[serde(rename = "session.stop", rename_all = "camelCase")]
@@ -30,7 +32,50 @@ pub enum RealtimeEvent {
         user_id: Uuid,
         device_id: Uuid,
         project_id: Uuid,
-        session_id: Uuid
+        session_id: Uuid,
+        codex_session_id: Option<String>
+    },
+    #[serde(rename = "codex.history.request", rename_all = "camelCase")]
+    CodexHistoryRequest {
+        event_id: Uuid,
+        request_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Option<Uuid>,
+        limit: u32
+    },
+    #[serde(rename = "codex.history.detail.request", rename_all = "camelCase")]
+    CodexHistoryDetailRequest {
+        event_id: Uuid,
+        request_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        codex_session_id: String
+    },
+    #[serde(rename = "codex.history.result", rename_all = "camelCase")]
+    CodexHistoryResult {
+        event_id: Uuid,
+        request_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        ok: bool,
+        sessions: Vec<CodexHistoryItem>,
+        error: Option<String>
+    },
+    #[serde(rename = "codex.history.detail.result", rename_all = "camelCase")]
+    CodexHistoryDetailResult {
+        event_id: Uuid,
+        request_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        codex_session_id: String,
+        ok: bool,
+        messages: Vec<CodexHistoryMessage>,
+        error: Option<String>
     },
     #[serde(rename = "diff.request", rename_all = "camelCase")]
     DiffRequest {
@@ -81,4 +126,22 @@ pub enum RealtimeEvent {
         diff: Option<String>,
         error: Option<String>
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexHistoryItem {
+    pub codex_session_id: String,
+    pub title: String,
+    pub updated_at: String,
+    pub preview: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexHistoryMessage {
+    pub id: String,
+    pub role: String,
+    pub text: String,
+    pub created_at: Option<String>,
 }

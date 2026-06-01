@@ -1,4 +1,4 @@
-import type { RealtimeEvent, SessionMessage, TerminalOutputChunk } from "@codex-transit/shared";
+import type { CodexHistoryMessage, RealtimeEvent, SessionMessage, TerminalOutputChunk } from "@codex-transit/shared";
 import { ChevronLeft, Clock3, SendHorizontal, TerminalSquare } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
@@ -11,6 +11,7 @@ export function SessionConsole(props: {
   sessionId: string;
   projectName: string;
   projectPath: string;
+  historyMessages: CodexHistoryMessage[];
   loadOutput: () => Promise<TerminalOutputChunk[]>;
   loadMessages: () => Promise<SessionMessage[]>;
   onBack: () => void;
@@ -23,6 +24,12 @@ export function SessionConsole(props: {
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const conversation = useMemo(() => buildConversationItems(messages, output), [messages, output]);
+  const historyConversation = props.historyMessages.map((message) => ({
+    id: message.id,
+    role: message.role === "user" ? "user" as const : "codex" as const,
+    text: message.text
+  }));
+  const visibleConversation = historyConversation.length ? [...historyConversation, ...conversation] : conversation;
 
   useEffect(() => {
     let mounted = true;
@@ -71,8 +78,8 @@ export function SessionConsole(props: {
       </header>
 
       <div className="mt-4 min-h-0 space-y-4 overflow-y-auto pb-4 pr-1">
-        {conversation.length ? (
-          conversation.map((item) => (
+        {visibleConversation.length ? (
+          visibleConversation.map((item) => (
             <article
               className={`grid max-w-[88%] gap-2 rounded-[22px] px-4 py-3 ${
                 item.role === "user"

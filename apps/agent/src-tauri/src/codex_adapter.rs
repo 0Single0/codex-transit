@@ -74,6 +74,24 @@ impl CodexAdapter {
         }
     }
 
+    pub fn build_resume_command(
+        &self,
+        _working_dir: PathBuf,
+        codex_session_id: &str,
+        _options: CodexExecOptions,
+    ) -> CodexExecCommand {
+        CodexExecCommand {
+            program: self.command.clone(),
+            args: vec![
+                "exec".to_string(),
+                "resume".to_string(),
+                "--skip-git-repo-check".to_string(),
+                codex_session_id.to_string(),
+                "-".to_string(),
+            ],
+        }
+    }
+
     pub async fn start(
         &self,
         session_id: Uuid,
@@ -82,6 +100,35 @@ impl CodexAdapter {
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
         let exec = self.build_exec_command(working_dir.clone(), CodexExecOptions::default());
+        self.spawn_command(session_id, working_dir, exec, prompt, output_tx)
+            .await
+    }
+
+    pub async fn resume(
+        &self,
+        session_id: Uuid,
+        working_dir: PathBuf,
+        codex_session_id: String,
+        prompt: String,
+        output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<CodexSessionProcess> {
+        let exec = self.build_resume_command(
+            working_dir.clone(),
+            &codex_session_id,
+            CodexExecOptions::default(),
+        );
+        self.spawn_command(session_id, working_dir, exec, prompt, output_tx)
+            .await
+    }
+
+    async fn spawn_command(
+        &self,
+        session_id: Uuid,
+        working_dir: PathBuf,
+        exec: CodexExecCommand,
+        prompt: String,
+        output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<CodexSessionProcess> {
         let mut child = Command::new(exec.program)
             .args(exec.args)
             .current_dir(working_dir)

@@ -1,6 +1,7 @@
 pub mod agent_config;
 pub mod agent_runtime;
 pub mod codex_adapter;
+pub mod codex_history;
 pub mod commands;
 pub mod diff_provider;
 pub mod file_watcher;

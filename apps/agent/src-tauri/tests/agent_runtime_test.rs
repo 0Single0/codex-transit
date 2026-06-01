@@ -44,6 +44,21 @@ impl SessionProcessRunner for RuntimeRunner {
             inputs: self.inputs.clone(),
         })
     }
+
+    async fn resume_session(
+        &self,
+        _session_id: Uuid,
+        _working_dir: PathBuf,
+        _codex_session_id: String,
+        prompt: String,
+        output_tx: mpsc::Sender<ProcessOutput>,
+    ) -> Result<Self::Process> {
+        self.prompts.lock().unwrap().push(prompt);
+        self.output_txs.lock().unwrap().push(output_tx);
+        Ok(RuntimeProcess {
+            inputs: self.inputs.clone(),
+        })
+    }
 }
 
 #[tokio::test]
@@ -205,6 +220,7 @@ fn session_start_event(project_id: Uuid, session_id: Uuid) -> RealtimeEvent {
         device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
         project_id,
         session_id,
+        codex_session_id: None,
     }
 }
 
@@ -216,6 +232,7 @@ fn session_input_event(project_id: Uuid, session_id: Uuid, text: &str) -> Realti
         device_id: "00000000-0000-4000-8000-000000000003".parse().unwrap(),
         project_id,
         session_id,
+        codex_session_id: None,
         text: text.to_string(),
     }
 }

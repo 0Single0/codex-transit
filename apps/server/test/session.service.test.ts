@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCodexHistoryDetailRequestEvent,
+  buildCodexHistoryRequestEvent,
   buildSessionRealtimeBase,
   buildStartAndInputEvents,
   toSessionSummary
@@ -87,5 +89,49 @@ describe("session service", () => {
         text: "帮我改登录页"
       }
     ]);
+  });
+
+  it("builds a device-level codex history request event", () => {
+    const event = buildCodexHistoryRequestEvent({
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      projectId: "00000000-0000-4000-8000-000000000004",
+      limit: 15
+    }, {
+      eventId: () => "00000000-0000-4000-8000-000000000010",
+      now: () => "2026-06-01T00:00:00.000Z"
+    });
+
+    expect(event).toEqual({
+      type: "codex.history.request",
+      eventId: "00000000-0000-4000-8000-000000000010",
+      requestId: "00000000-0000-4000-8000-000000000010",
+      timestamp: "2026-06-01T00:00:00.000Z",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      projectId: "00000000-0000-4000-8000-000000000004",
+      limit: 15
+    });
+  });
+
+  it("builds a device-level codex history detail request event", () => {
+    const event = buildCodexHistoryDetailRequestEvent({
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      codexSessionId: "019e8268-8f45-7422-aff8-5524d4c6990b"
+    }, {
+      eventId: () => "00000000-0000-4000-8000-000000000010",
+      now: () => "2026-06-01T00:00:00.000Z"
+    });
+
+    expect(event).toEqual({
+      type: "codex.history.detail.request",
+      eventId: "00000000-0000-4000-8000-000000000010",
+      requestId: "00000000-0000-4000-8000-000000000010",
+      timestamp: "2026-06-01T00:00:00.000Z",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      codexSessionId: "019e8268-8f45-7422-aff8-5524d4c6990b"
+    });
   });
 });

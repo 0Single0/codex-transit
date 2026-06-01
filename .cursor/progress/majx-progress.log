@@ -473,3 +473,21 @@
   - apps/agent/src-tauri/src/commands.rs、lib.rs、Cargo.toml：新增 choose_project_directory Tauri 命令和 rfd 依赖
   - apps/agent/src-tauri/src/session_manager.rs、agent_runtime.rs：发送失败输出回传，坏事件不终止 Agent 循环
   - apps/agent/src-tauri/tests/*、apps/agent/src/agentApi.test.ts：补充回归测试
+
+[2026-06-01]
+用户输入：历史对话和对话链路做好；历史应该用 codex cli 获取而不是存在我们的数据库；包含对话历史
+完成：Codex 历史列表、历史对话内容和 resume 对话链路闭环 (majx)
+  - 新增 codex.history 列表/详情实时协议，手机请求后由桌面 Agent 从本机 Codex 历史文件读取并回传
+  - 历史列表读取 session_index.jsonl，历史对话内容读取 sessions/archived_sessions 下对应 rollout jsonl
+  - 服务端只做设备级实时转发，不保存 Codex 历史列表或历史详情到数据库
+  - 手机端历史页展示真实 Codex 历史，点历史项加载历史对话内容，并在后续发送时携带 codexSessionId
+  - Agent 收到带 codexSessionId 的输入后走 codex exec resume，继续原 Codex 会话链路
+
+涉及文件：
+  - packages/shared/src/events.ts：新增 Codex 历史列表与详情实时事件 schema
+  - apps/server/src/modules/sessions/session.routes.ts、session.service.ts：新增历史列表/详情请求透传和 resume 输入转发
+  - apps/server/src/modules/realtime/*：支持按设备广播历史结果到手机
+  - apps/agent/src-tauri/src/codex_history.rs：读取 Codex 本地 session_index 和 rollout 对话文件
+  - apps/agent/src-tauri/src/session_manager.rs、codex_adapter.rs：处理历史请求并支持 codex exec resume
+  - apps/web/src/App.tsx、api/client.ts、api/realtime.ts、components/SessionConsole.tsx：历史列表/详情展示与继续对话
+  - apps/**/test、packages/shared/src/events.test.ts：补充协议、API、Agent 历史解析与 resume 回归测试

@@ -17,4 +17,18 @@ describe("ConnectionRegistry", () => {
     const registry = new ConnectionRegistry();
     expect(registry.sendToAgent("missing", { type: "ping" })).toBe(false);
   });
+
+  it("routes messages to every viewer connected to a device", () => {
+    const registry = new ConnectionRegistry();
+    const first = vi.fn();
+    const second = vi.fn();
+    registry.addDeviceViewer("device-1", { send: first as (message: string) => void });
+    registry.addDeviceViewer("device-1", { send: second as (message: string) => void });
+
+    const count = registry.broadcastToDeviceViewers("device-1", { type: "codex.history.result" });
+
+    expect(count).toBe(2);
+    expect(first).toHaveBeenCalledWith(JSON.stringify({ type: "codex.history.result" }));
+    expect(second).toHaveBeenCalledWith(JSON.stringify({ type: "codex.history.result" }));
+  });
 });

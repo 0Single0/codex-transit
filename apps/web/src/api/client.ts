@@ -86,10 +86,30 @@ export class ApiClient {
     });
   }
 
-  async sendSessionInput(sessionId: string, text: string): Promise<{ ok: boolean }> {
+  async requestCodexHistory(
+    deviceId: string,
+    projectId?: string,
+    limit = 30
+  ): Promise<{ ok: boolean; requestId: string }> {
+    return this.request(`/devices/${deviceId}/codex-history`, {
+      method: "POST",
+      data: { projectId, limit }
+    });
+  }
+
+  async requestCodexHistoryDetail(
+    deviceId: string,
+    codexSessionId: string
+  ): Promise<{ ok: boolean; requestId: string }> {
+    return this.request(`/devices/${deviceId}/codex-history/${codexSessionId}`, {
+      method: "POST"
+    });
+  }
+
+  async sendSessionInput(sessionId: string, text: string, codexSessionId?: string): Promise<{ ok: boolean }> {
     return this.request(`/sessions/${sessionId}/input`, {
       method: "POST",
-      data: { text }
+      data: { text, ...(codexSessionId ? { codexSessionId } : {}) }
     });
   }
 
