@@ -1,5 +1,5 @@
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{agent_config::AgentSettings, project_registry::ProjectEntry};
@@ -22,11 +22,43 @@ pub struct ProjectSyncRequest {
 
 pub struct ProjectSyncHttpClient;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceBindRequestInput {
+    pub server_url: String,
+    pub bind_code: String,
+    pub name: String,
+    pub platform: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceBindResponse {
+    pub device_id: String,
+    pub token: String,
+}
+
+#[derive(Debug)]
+pub struct DeviceBindRequest {
+    pub url: Url,
+    pub body: String,
+}
+
+pub struct DeviceBindHttpClient;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectSyncBody {
     device_id: String,
     projects: Vec<SyncProject>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceBindBody {
+    bind_code: String,
+    name: String,
+    platform: String,
 }
 
 pub fn build_project_sync_request(
@@ -91,5 +123,42 @@ impl ProjectSyncHttpClient {
             .await?;
         response.error_for_status()?;
         Ok(())
+    }
+}
+
+pub fn build_device_bind_request(
+    base_url: &str,
+    bind_code: &str,
+    name: &str,
+    platform: &str,
+) -> Result<DeviceBindRequest> {
+    let mut url = Url::parse(base_url)?;
+    url.set_path("/agent/bind");
+    url.set_query(None);
+    let body = serde_json::to_string(&DeviceBindBody {
+        bind_code: bind_code.to_string(),
+        name: name.to_string(),
+        platform: platform.to_string(),
+    })?;
+    Ok(DeviceBindRequest { url, body })
+}
+
+impl DeviceBindHttpClient {
+    pub fn headers() -> Vec<(String, String)> {
+        vec![("content-type".to_string(), "application/json".to_string())]
+    }
+
+    pub async fn send(request: DeviceBindRequest) -> Result<DeviceBindResponse> {
+        let client = reqwest::Client::new();
+        let response = client
+            .post(request.url)
+            .header("content-type", "application/json")
+            .body(request.body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<DeviceBindResponse>()
+            .await?;
+        Ok(response)
     }
 }

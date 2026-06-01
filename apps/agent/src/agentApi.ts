@@ -18,6 +18,13 @@ export type AgentRuntimeStatus = {
   running: boolean;
 };
 
+export type BindDeviceRequest = {
+  serverUrl: string;
+  bindCode: string;
+  name: string;
+  platform: "windows" | "macos" | "unknown";
+};
+
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 export type AgentApi = ReturnType<typeof createAgentApi>;
@@ -54,6 +61,10 @@ export function createAgentApi(invoke: Invoke = tauriInvoke) {
 
     getRuntimeStatus() {
       return invoke<AgentRuntimeStatus>("get_agent_runtime_status");
+    },
+
+    bindDevice(request: BindDeviceRequest) {
+      return invoke<AgentSettings>("bind_device", { request });
     }
   };
 }

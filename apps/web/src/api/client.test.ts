@@ -37,4 +37,22 @@ describe("ApiClient", () => {
       }
     });
   });
+
+  it("creates device bind codes for the signed in user", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ bindCode: "abc12345", expiresAt: "2026-06-01T00:00:00.000Z" })
+    });
+    const api = new ApiClient("token", fetchMock as never);
+
+    await api.createDeviceBindCode();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/devices/bind-codes", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
 });

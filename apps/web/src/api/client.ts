@@ -1,4 +1,10 @@
-import type { DeviceProjectsResponse, DeviceSummary, LoginResponse, SessionSummary } from "@codex-transit/shared";
+import type {
+  CreateBindCodeResponse,
+  DeviceProjectsResponse,
+  DeviceSummary,
+  LoginResponse,
+  SessionSummary
+} from "@codex-transit/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
@@ -17,6 +23,10 @@ export class ApiClient {
 
   async devices(): Promise<DeviceSummary[]> {
     return this.request("/devices");
+  }
+
+  async createDeviceBindCode(): Promise<CreateBindCodeResponse> {
+    return this.request("/devices/bind-codes", { method: "POST" });
   }
 
   async sessions(projectId: string): Promise<SessionSummary[]> {

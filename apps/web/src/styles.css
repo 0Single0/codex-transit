@@ -126,3 +126,19 @@ button {
   background: #ffffff;
   border-color: #c9d4da;
 }
+
+.bind-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed #8aa0aa;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fbfc;
+}
+
+.bind-code strong {
+  font-size: 1.35rem;
+  letter-spacing: 0;
+}

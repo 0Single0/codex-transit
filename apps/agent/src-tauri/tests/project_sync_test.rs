@@ -4,7 +4,8 @@ use codex_transit_agent::{
     agent_config::AgentSettings,
     project_registry::ProjectEntry,
     project_sync::{
-        build_project_sync_request, sync_projects_from_registry, ProjectSyncHttpClient, SyncProject,
+        build_device_bind_request, build_project_sync_request, sync_projects_from_registry,
+        DeviceBindHttpClient, ProjectSyncHttpClient, SyncProject,
     },
 };
 
@@ -78,5 +79,25 @@ fn exposes_request_headers_for_project_sync_http_client() {
             ("content-type".to_string(), "application/json".to_string()),
             ("x-device-token".to_string(), "device-token".to_string())
         ]
+    );
+}
+
+#[test]
+fn builds_device_bind_request() {
+    let request = build_device_bind_request(
+        "http://localhost:4000",
+        "bind-code",
+        "Workstation",
+        "windows",
+    )
+    .unwrap();
+
+    assert_eq!(request.url.as_str(), "http://localhost:4000/agent/bind");
+    assert!(request.body.contains("\"bindCode\":\"bind-code\""));
+    assert!(request.body.contains("\"name\":\"Workstation\""));
+    assert!(request.body.contains("\"platform\":\"windows\""));
+    assert_eq!(
+        DeviceBindHttpClient::headers(),
+        vec![("content-type".to_string(), "application/json".to_string())]
     );
 }

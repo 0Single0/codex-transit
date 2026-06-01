@@ -15,6 +15,7 @@ export function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [bindCode, setBindCode] = useState<{ code: string; expiresAt: string } | null>(null);
   const api = useMemo(() => new ApiClient(token), [token]);
 
   async function login(email: string, password: string) {
@@ -27,6 +28,11 @@ export function App() {
 
   async function refreshDevices() {
     setDevices(await api.devices());
+  }
+
+  async function createBindCode() {
+    const response = await api.createDeviceBindCode();
+    setBindCode({ code: response.bindCode, expiresAt: response.expiresAt });
   }
 
   async function selectDevice(device: DeviceSummary) {
@@ -59,7 +65,12 @@ export function App() {
 
       {!token ? <LoginView onLogin={login} /> : null}
       {token && !selectedDevice && !selectedSessionId ? (
-        <DeviceListView devices={devices} onSelect={selectDevice} />
+        <DeviceListView
+          bindCode={bindCode}
+          devices={devices}
+          onCreateBindCode={createBindCode}
+          onSelect={selectDevice}
+        />
       ) : null}
       {token && selectedDevice && !selectedProject && !selectedSessionId ? (
         <ProjectListView

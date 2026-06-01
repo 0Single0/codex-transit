@@ -6,6 +6,10 @@ export function App() {
   const [serverUrl, setServerUrl] = useState("");
   const [deviceId, setDeviceId] = useState("");
   const [deviceToken, setDeviceToken] = useState("");
+  const [bindCode, setBindCode] = useState("");
+  const [deviceName, setDeviceName] = useState(
+    typeof navigator === "undefined" ? "Desktop Agent" : navigator.userAgent.includes("Mac") ? "Mac Agent" : "Windows Agent"
+  );
   const [projectPath, setProjectPath] = useState("");
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [runtimeRunning, setRuntimeRunning] = useState(false);
@@ -50,6 +54,29 @@ export function App() {
     try {
       await api.saveSettings({ serverUrl, deviceId, deviceToken });
       setMessage("Connection settings saved.");
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bindDevice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const settings = await api.bindDevice({
+        serverUrl,
+        bindCode,
+        name: deviceName,
+        platform: detectPlatform()
+      });
+      setDeviceId(settings.deviceId);
+      setDeviceToken(settings.deviceToken);
+      setBindCode("");
+      setMessage("Device paired and connection settings saved.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -136,6 +163,28 @@ export function App() {
         <div className="layout-grid">
           <section className="panel" aria-labelledby="settings-title">
             <h2 id="settings-title">Relay connection</h2>
+            <form className="form-grid" onSubmit={bindDevice}>
+              <label>
+                Pairing code
+                <input
+                  value={bindCode}
+                  onChange={(event) => setBindCode(event.target.value)}
+                  placeholder="code from phone"
+                />
+              </label>
+              <label>
+                Device name
+                <input
+                  value={deviceName}
+                  onChange={(event) => setDeviceName(event.target.value)}
+                  placeholder="Workstation"
+                />
+              </label>
+              <button disabled={busy || !serverUrl || !bindCode || !deviceName} type="submit">
+                Pair this computer
+              </button>
+            </form>
+            <p className="hint">Manual credentials remain available for local development.</p>
             <form className="form-grid" onSubmit={saveSettings}>
               <label>
                 Server URL
@@ -231,4 +280,12 @@ export function App() {
 
 function toErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function detectPlatform(): "windows" | "macos" | "unknown" {
+  if (typeof navigator === "undefined") return "unknown";
+  const value = navigator.userAgent.toLowerCase();
+  if (value.includes("windows")) return "windows";
+  if (value.includes("mac")) return "macos";
+  return "unknown";
 }

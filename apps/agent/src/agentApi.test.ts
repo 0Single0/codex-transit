@@ -48,4 +48,30 @@ describe("createAgentApi", () => {
     expect(invoke).toHaveBeenCalledWith("start_agent_runtime");
     expect(status.running).toBe(true);
   });
+
+  it("binds the agent with a pairing code", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      serverUrl: "http://localhost:4000",
+      deviceId: "device-1",
+      deviceToken: "token-1"
+    });
+    const api = createAgentApi(invoke);
+
+    const result = await api.bindDevice({
+      serverUrl: "http://localhost:4000",
+      bindCode: "pair-code",
+      name: "Workstation",
+      platform: "windows"
+    });
+
+    expect(invoke).toHaveBeenCalledWith("bind_device", {
+      request: {
+        serverUrl: "http://localhost:4000",
+        bindCode: "pair-code",
+        name: "Workstation",
+        platform: "windows"
+      }
+    });
+    expect(result.deviceToken).toBe("token-1");
+  });
 });

@@ -9,7 +9,10 @@ use crate::{
     agent_config::{AgentConfig, AgentSettings},
     file_watcher::FileWatcher,
     project_registry::{ProjectEntry, ProjectRegistry},
-    project_sync::{sync_projects_from_registry, ProjectSyncHttpClient, ProjectSyncRequest},
+    project_sync::{
+        build_device_bind_request, sync_projects_from_registry, DeviceBindHttpClient,
+        DeviceBindRequestInput, ProjectSyncHttpClient, ProjectSyncRequest,
+    },
     server_client::{AgentRealtimeConfig, ServerClient},
     session_manager::SessionManager,
 };
@@ -131,6 +134,29 @@ pub fn build_realtime_config_from_state(state: &AgentState) -> Result<AgentRealt
     let settings =
         get_saved_agent_settings(state)?.ok_or_else(|| "agent is not configured".to_string())?;
     AgentRealtimeConfig::from_settings(&settings).map_err(|error| error.to_string())
+}
+
+pub async fn bind_device_in_state(
+    state: &AgentState,
+    request: DeviceBindRequestInput,
+) -> Result<AgentSettings, String> {
+    let bind_request = build_device_bind_request(
+        &request.server_url,
+        &request.bind_code,
+        &request.name,
+        &request.platform,
+    )
+    .map_err(|error| error.to_string())?;
+    let response = DeviceBindHttpClient::send(bind_request)
+        .await
+        .map_err(|error| error.to_string())?;
+    let settings = AgentSettings {
+        server_url: request.server_url,
+        device_id: response.device_id,
+        device_token: response.token,
+    };
+    save_agent_settings_in_state(state, settings.clone())?;
+    Ok(settings)
 }
 
 fn reserve_agent_runtime_start(state: &AgentState) -> Result<RuntimeLaunch, String> {
@@ -277,4 +303,12 @@ pub fn stop_agent_runtime(state: State<AgentState>) -> Result<AgentRuntimeStatus
 #[tauri::command]
 pub fn get_agent_runtime_status(state: State<AgentState>) -> Result<AgentRuntimeStatus, String> {
     get_agent_runtime_status_from_state(&state)
+}
+
+#[tauri::command]
+pub async fn bind_device(
+    request: DeviceBindRequestInput,
+    state: State<'_, AgentState>,
+) -> Result<AgentSettings, String> {
+    bind_device_in_state(&state, request).await
 }

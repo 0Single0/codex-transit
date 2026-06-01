@@ -51,6 +51,7 @@ export const deviceProjectsResponseSchema = z.object({
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type DeviceSummary = z.infer<typeof deviceSummarySchema>;
+export type CreateBindCodeResponse = z.infer<typeof createBindCodeResponseSchema>;
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type DeviceProjectsResponse = z.infer<typeof deviceProjectsResponseSchema>;

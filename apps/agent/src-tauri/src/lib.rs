@@ -12,8 +12,8 @@ pub mod server_client;
 pub mod session_manager;
 
 use commands::{
-    add_project, get_agent_runtime_status, get_agent_settings, list_projects, save_agent_settings,
-    start_agent_runtime, stop_agent_runtime, sync_projects_now, AgentState,
+    add_project, bind_device, get_agent_runtime_status, get_agent_settings, list_projects,
+    save_agent_settings, start_agent_runtime, stop_agent_runtime, sync_projects_now, AgentState,
 };
 
 pub fn run() {
@@ -27,7 +27,8 @@ pub fn run() {
             sync_projects_now,
             start_agent_runtime,
             stop_agent_runtime,
-            get_agent_runtime_status
+            get_agent_runtime_status,
+            bind_device
         ])
         .plugin(tauri_plugin_shell::init())
         .run(tauri::generate_context!())
