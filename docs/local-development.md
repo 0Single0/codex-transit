@@ -32,6 +32,8 @@ pnpm dev
 The server runs on `http://localhost:4000`.
 The PWA runs on `http://localhost:5174`.
 
+The same environment values are documented in `apps/server/.env.example`.
+
 ## Start Agent
 
 ```powershell
