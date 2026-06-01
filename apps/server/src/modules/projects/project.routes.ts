@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticateDeviceToken, readDeviceTokenHeader } from "../devices/device-auth";
 import { requireUser } from "../../plugins/auth";
+import { toProjectSummary } from "./project.service";
 
 const syncProjectsSchema = z.object({
   deviceId: z.string().uuid(),
@@ -21,10 +22,10 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const params = z.object({ deviceId: z.string().uuid() }).parse(request.params);
     return {
       deviceId: params.deviceId,
-      projects: await app.prisma.project.findMany({
+      projects: (await app.prisma.project.findMany({
         where: { userId: user.id, deviceId: params.deviceId },
         select: { id: true, displayName: true, pathAlias: true, available: true }
-      })
+      })).map(toProjectSummary)
     };
   });
 
