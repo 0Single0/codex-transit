@@ -10,6 +10,7 @@ use crate::{
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
     file_watcher::FileChange,
     protocol::RealtimeEvent,
+    session_trace::{append_trace_line, maybe_open_trace_console},
 };
 
 pub trait ManagedSessionProcess {
@@ -210,6 +211,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             bail!("project is not registered");
         };
         let resume_id = codex_session_id.or(context.codex_session_id);
+        let _ = append_trace_line(session_id, &format!("USER> {text}"));
         let process_result = if let Some(resume_id) = resume_id {
             self.runner
                 .resume_session(session_id, project_root, resume_id, text, self.output_tx.clone())
@@ -222,6 +224,10 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let process = match process_result {
             Ok(process) => process,
             Err(error) => {
+                let _ = append_trace_line(
+                    session_id,
+                    &format!("ERR> Codex 启动失败: {}", format_error_chain(&error)),
+                );
                 self.record_process_output(ProcessOutput {
                     session_id,
                     stream: OutputStream::Stderr,
@@ -248,6 +254,13 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
     }
 
     pub async fn record_process_output(&mut self, output: ProcessOutput) -> Result<()> {
+        let prefix = match output.stream {
+            OutputStream::Stdout => "STDOUT>",
+            OutputStream::Stderr => "STDERR>",
+        };
+        if let Ok(log_path) = append_trace_line(output.session_id, &format!("{prefix} {}", output.text)) {
+            let _ = maybe_open_trace_console(output.session_id, &log_path);
+        }
         let event = self.output_to_event(output)?;
         self.outbound_tx.send(event).await?;
         Ok(())

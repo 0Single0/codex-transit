@@ -1,6 +1,6 @@
-import type { CodexHistoryMessage, RealtimeEvent, SessionMessage, TerminalOutputChunk } from "@codex-transit/shared";
+import type { CodexHistoryMessage, RealtimeEvent, TerminalOutputChunk } from "@codex-transit/shared";
 import { ChevronLeft, Clock3, SendHorizontal, TerminalSquare } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
 import { buildConversationItems } from "../conversationItems";
 import type { WebMessages } from "../i18n";
@@ -13,17 +13,19 @@ export function SessionConsole(props: {
   projectPath: string;
   historyMessages: CodexHistoryMessage[];
   loadOutput: () => Promise<TerminalOutputChunk[]>;
-  loadMessages: () => Promise<SessionMessage[]>;
   onBack: () => void;
   onHistory: () => void;
   onSend: (text: string) => Promise<void>;
 }) {
   const [output, setOutput] = useState<TerminalOutputChunk[]>([]);
-  const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [prompt, setPrompt] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const conversation = useMemo(() => buildConversationItems(messages, output), [messages, output]);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [isWaitingResponse, setIsWaitingResponse] = useState(false);
+  const [lastSendAt, setLastSendAt] = useState<number | null>(null);
+  const timeoutHandle = useRef<number | null>(null);
+  const conversation = useMemo(() => buildConversationItems([], output), [output]);
   const historyConversation = props.historyMessages.map((message) => ({
     id: message.id,
     role: message.role === "user" ? "user" as const : "codex" as const,
@@ -33,23 +35,34 @@ export function SessionConsole(props: {
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([props.loadOutput(), props.loadMessages()]).then(([nextOutput, nextMessages]) => {
+    void props.loadOutput().then((nextOutput) => {
       if (!mounted) return;
       setOutput(nextOutput);
-      setMessages(nextMessages);
     });
 
     const stream = connectSessionStream({
       token: props.token,
       sessionId: props.sessionId,
+      onConnected: () => setIsRealtimeConnected(true),
+      onDisconnected: () => setIsRealtimeConnected(false),
+      onError: () => setIsRealtimeConnected(false),
       onEvent(event: RealtimeEvent) {
         if (event.type === "codex.output.chunk") {
+          if (timeoutHandle.current) {
+            window.clearTimeout(timeoutHandle.current);
+            timeoutHandle.current = null;
+          }
+          setIsWaitingResponse(false);
           setOutput((current) => [...current, event]);
         }
       }
     });
     return () => {
       mounted = false;
+      if (timeoutHandle.current) {
+        window.clearTimeout(timeoutHandle.current);
+        timeoutHandle.current = null;
+      }
       stream.close();
     };
   }, [props.token, props.sessionId]);
@@ -67,6 +80,9 @@ export function SessionConsole(props: {
         <div className="min-w-0 text-center">
           <h1 className="truncate text-base font-semibold">{props.projectName}</h1>
           <p className="mt-0.5 truncate text-[11px] text-slate-500">{props.projectPath}</p>
+          <p className={`mt-1 text-[11px] ${isRealtimeConnected ? "text-emerald-300" : "text-amber-300"}`}>
+            {isRealtimeConnected ? "实时通道已连接" : "实时通道未连接"}
+          </p>
         </div>
         <button
           className="grid h-11 w-11 place-items-center rounded-full bg-white/[0.06] text-slate-200"
@@ -78,6 +94,11 @@ export function SessionConsole(props: {
       </header>
 
       <div className="mt-4 min-h-0 space-y-4 overflow-y-auto pb-4 pr-1">
+        {isWaitingResponse ? (
+          <div className="rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+            已发送，正在等待 Codex 输出...
+          </div>
+        ) : null}
         {visibleConversation.length ? (
           visibleConversation.map((item) => (
             <article
@@ -113,15 +134,28 @@ export function SessionConsole(props: {
           if (!text || isSending) return;
           setSendError(null);
           setIsSending(true);
-          setMessages((current) => [...current, { role: "user", text }]);
           setPrompt("");
           try {
             await props.onSend(text);
+            setLastSendAt(Date.now());
+            setIsWaitingResponse(true);
+            if (timeoutHandle.current) {
+              window.clearTimeout(timeoutHandle.current);
+            }
+            timeoutHandle.current = window.setTimeout(() => {
+              setIsWaitingResponse(false);
+              setSendError("消息已发送，但超时未收到 Codex 输出，请检查 Agent 在线状态。");
+            }, 15000);
           } catch (caught) {
             const message = caught instanceof Error && caught.message.includes("agent_offline")
               ? props.labels.agentOffline
               : props.labels.sendFailed;
             setSendError(message);
+            setIsWaitingResponse(false);
+            if (timeoutHandle.current) {
+              window.clearTimeout(timeoutHandle.current);
+              timeoutHandle.current = null;
+            }
           } finally {
             setIsSending(false);
           }
@@ -145,6 +179,7 @@ export function SessionConsole(props: {
           </button>
         </div>
         {sendError ? <p className="px-2 pb-1 text-sm text-red-300">{sendError}</p> : null}
+        {lastSendAt ? <p className="px-2 pb-1 text-[11px] text-slate-500">最后发送时间: {new Date(lastSendAt).toLocaleTimeString()}</p> : null}
       </form>
     </section>
   );

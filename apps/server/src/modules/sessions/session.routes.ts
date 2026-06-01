@@ -105,10 +105,12 @@ export async function registerSessionRoutes(app: FastifyInstance) {
   app.get("/sessions/:sessionId/messages", async (request) => {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
-    return app.prisma.sessionMessage.findMany({
-      where: { session: { id: params.sessionId, userId: user.id } },
-      orderBy: { createdAt: "asc" }
+    const exists = await app.prisma.session.findFirst({
+      where: { id: params.sessionId, userId: user.id },
+      select: { id: true }
     });
+    if (!exists) return [];
+    return [];
   });
 
   app.post("/sessions/:sessionId/start", async (request, reply) => {
@@ -145,10 +147,6 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       include: { project: { select: { agentKey: true } } }
     });
     if (!session) return reply.code(404).send({ error: "session_not_found" });
-
-    await app.prisma.sessionMessage.create({
-      data: { sessionId: session.id, role: "user", text: body.text }
-    });
 
     for (const event of buildStartAndInputEvents(session, body.text, undefined, body.codexSessionId)) {
       const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
