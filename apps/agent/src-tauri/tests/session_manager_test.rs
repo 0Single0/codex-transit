@@ -7,6 +7,7 @@ use std::{
 use anyhow::Result;
 use codex_transit_agent::{
     codex_adapter::{OutputStream, ProcessOutput},
+    diff_provider::ProjectDiffProvider,
     protocol::RealtimeEvent,
     session_manager::{ManagedSessionProcess, SessionManager, SessionProcessRunner},
 };
@@ -28,6 +29,11 @@ struct RunnerState {
 #[derive(Default, Clone)]
 struct FakeRunner {
     state: Arc<Mutex<RunnerState>>,
+}
+
+#[derive(Clone)]
+struct FakeDiffProvider {
+    result: Result<String, String>,
 }
 
 struct FakeProcess {
@@ -52,6 +58,23 @@ impl SessionProcessRunner for FakeRunner {
     }
 }
 
+impl Default for FakeDiffProvider {
+    fn default() -> Self {
+        Self {
+            result: Ok("diff --git a/src/main.rs b/src/main.rs".to_string()),
+        }
+    }
+}
+
+impl ProjectDiffProvider for FakeDiffProvider {
+    fn diff_file(&self, _project_root: &std::path::Path, _relative_path: &str) -> Result<String> {
+        match &self.result {
+            Ok(diff) => Ok(diff.clone()),
+            Err(error) => anyhow::bail!(error.clone()),
+        }
+    }
+}
+
 fn start_event() -> RealtimeEvent {
     RealtimeEvent::SessionStart {
         event_id: "00000000-0000-4000-8000-000000000010".parse().unwrap(),
@@ -61,6 +84,12 @@ fn start_event() -> RealtimeEvent {
         project_id: PROJECT_ID.parse().unwrap(),
         session_id: SESSION_ID.parse().unwrap(),
     }
+}
+
+fn manager_with_diff_provider(
+    diff_provider: FakeDiffProvider,
+) -> SessionManager<FakeRunner, FakeDiffProvider> {
+    SessionManager::with_diff_provider(FakeRunner::default(), diff_provider)
 }
 
 impl ManagedSessionProcess for FakeProcess {
@@ -283,4 +312,86 @@ async fn stop_event_stops_and_removes_running_session() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("session is not running"));
+}
+
+#[tokio::test]
+async fn handles_diff_request_with_diff_result_event() {
+    let mut manager = manager_with_diff_provider(FakeDiffProvider::default());
+    let session_id = SESSION_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+    let request_id = "00000000-0000-4000-8000-000000000020".parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.handle_event(start_event()).await.unwrap();
+    manager
+        .handle_event(RealtimeEvent::DiffRequest {
+            event_id: "00000000-0000-4000-8000-000000000021".parse().unwrap(),
+            request_id,
+            timestamp: "2026-06-01T00:00:03.000Z".to_string(),
+            user_id: USER_ID.parse().unwrap(),
+            device_id: DEVICE_ID.parse().unwrap(),
+            project_id,
+            session_id,
+            relative_path: "src/main.rs".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let event = manager.next_outbound_event().await.unwrap();
+
+    assert!(matches!(
+        event,
+        RealtimeEvent::DiffResult {
+            request_id: result_request_id,
+            project_id: result_project_id,
+            session_id: result_session_id,
+            relative_path,
+            ok: true,
+            diff: Some(diff),
+            error: None,
+            ..
+        } if result_request_id == request_id
+            && result_project_id == project_id
+            && result_session_id == session_id
+            && relative_path == "src/main.rs"
+            && diff.contains("diff --git")
+    ));
+}
+
+#[tokio::test]
+async fn handles_diff_provider_errors_with_failed_diff_result() {
+    let mut manager = manager_with_diff_provider(FakeDiffProvider {
+        result: Err("path resolves outside project".to_string()),
+    });
+    let session_id = SESSION_ID.parse().unwrap();
+    let project_id = PROJECT_ID.parse().unwrap();
+    let request_id = "00000000-0000-4000-8000-000000000020".parse().unwrap();
+
+    manager.register_project(project_id, PathBuf::from("C:/projects/demo"));
+    manager.handle_event(start_event()).await.unwrap();
+    manager
+        .handle_event(RealtimeEvent::DiffRequest {
+            event_id: "00000000-0000-4000-8000-000000000021".parse().unwrap(),
+            request_id,
+            timestamp: "2026-06-01T00:00:03.000Z".to_string(),
+            user_id: USER_ID.parse().unwrap(),
+            device_id: DEVICE_ID.parse().unwrap(),
+            project_id,
+            session_id,
+            relative_path: "../secret.txt".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let event = manager.next_outbound_event().await.unwrap();
+
+    assert!(matches!(
+        event,
+        RealtimeEvent::DiffResult {
+            ok: false,
+            diff: None,
+            error: Some(error),
+            ..
+        } if error.contains("outside project")
+    ));
 }

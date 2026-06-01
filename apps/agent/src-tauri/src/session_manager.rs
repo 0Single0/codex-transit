@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     codex_adapter::{CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput},
+    diff_provider::{GitDiffProvider, ProjectDiffProvider},
     protocol::RealtimeEvent,
 };
 
@@ -25,8 +26,12 @@ pub trait SessionProcessRunner {
     ) -> impl std::future::Future<Output = Result<Self::Process>> + Send;
 }
 
-pub struct SessionManager<R: SessionProcessRunner = CodexAdapter> {
+pub struct SessionManager<
+    R: SessionProcessRunner = CodexAdapter,
+    D: ProjectDiffProvider = GitDiffProvider,
+> {
     runner: R,
+    diff_provider: D,
     projects: HashMap<Uuid, PathBuf>,
     sessions: HashMap<Uuid, R::Process>,
     contexts: HashMap<Uuid, SessionContext>,
@@ -44,18 +49,25 @@ struct SessionContext {
     project_id: Uuid,
 }
 
-impl SessionManager<CodexAdapter> {
+impl SessionManager<CodexAdapter, GitDiffProvider> {
     pub fn default_codex() -> Self {
         Self::new(CodexAdapter::new("codex"))
     }
 }
 
-impl<R: SessionProcessRunner> SessionManager<R> {
+impl<R: SessionProcessRunner> SessionManager<R, GitDiffProvider> {
     pub fn new(runner: R) -> Self {
+        Self::with_diff_provider(runner, GitDiffProvider)
+    }
+}
+
+impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
+    pub fn with_diff_provider(runner: R, diff_provider: D) -> Self {
         let (output_tx, output_rx) = mpsc::channel(256);
         let (outbound_tx, outbound_rx) = mpsc::channel(256);
         Self {
             runner,
+            diff_provider,
             projects: HashMap::new(),
             sessions: HashMap::new(),
             contexts: HashMap::new(),
@@ -94,8 +106,16 @@ impl<R: SessionProcessRunner> SessionManager<R> {
                 session_id, text, ..
             } => self.send_input(session_id, text).await,
             RealtimeEvent::SessionStop { session_id, .. } => self.stop_session(session_id).await,
-            RealtimeEvent::DiffRequest { .. }
-            | RealtimeEvent::CodexOutputChunk { .. }
+            RealtimeEvent::DiffRequest {
+                request_id,
+                session_id,
+                relative_path,
+                ..
+            } => {
+                self.handle_diff_request(request_id, session_id, relative_path)
+                    .await
+            }
+            RealtimeEvent::CodexOutputChunk { .. }
             | RealtimeEvent::FileChanged { .. }
             | RealtimeEvent::DiffResult { .. } => Ok(()),
         }
@@ -163,6 +183,51 @@ impl<R: SessionProcessRunner> SessionManager<R> {
         Ok(true)
     }
 
+    async fn handle_diff_request(
+        &mut self,
+        request_id: Uuid,
+        session_id: Uuid,
+        relative_path: String,
+    ) -> Result<()> {
+        let Some(context) = self.contexts.get(&session_id).cloned() else {
+            bail!("session is not running");
+        };
+        let Some(project_root) = self.projects.get(&context.project_id) else {
+            bail!("project is not registered");
+        };
+        let diff_result = self.diff_provider.diff_file(project_root, &relative_path);
+        let event = match diff_result {
+            Ok(diff) => RealtimeEvent::DiffResult {
+                event_id: Uuid::new_v4(),
+                request_id,
+                timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                user_id: context.user_id,
+                device_id: context.device_id,
+                project_id: context.project_id,
+                session_id,
+                relative_path,
+                ok: true,
+                diff: Some(diff),
+                error: None,
+            },
+            Err(error) => RealtimeEvent::DiffResult {
+                event_id: Uuid::new_v4(),
+                request_id,
+                timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                user_id: context.user_id,
+                device_id: context.device_id,
+                project_id: context.project_id,
+                session_id,
+                relative_path,
+                ok: false,
+                diff: None,
+                error: Some(error.to_string()),
+            },
+        };
+        self.outbound_tx.send(event).await?;
+        Ok(())
+    }
+
     fn output_to_event(&mut self, output: ProcessOutput) -> Result<RealtimeEvent> {
         let Some(context) = self.contexts.get(&output.session_id).cloned() else {
             bail!("session is not running");
@@ -184,7 +249,7 @@ impl<R: SessionProcessRunner> SessionManager<R> {
     }
 }
 
-impl Default for SessionManager<CodexAdapter> {
+impl Default for SessionManager<CodexAdapter, GitDiffProvider> {
     fn default() -> Self {
         Self::default_codex()
     }
