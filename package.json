@@ -11,7 +11,9 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "dev:agent": "pnpm --filter @codex-transit/agent dev",
+    "verify": "pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
