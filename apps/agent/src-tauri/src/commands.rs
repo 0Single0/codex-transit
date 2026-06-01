@@ -5,6 +5,7 @@ use tauri::State;
 use crate::{
     agent_config::{AgentConfig, AgentSettings},
     project_registry::{ProjectEntry, ProjectRegistry},
+    project_sync::{sync_projects_from_registry, ProjectSyncRequest},
 };
 
 pub struct AgentState {
@@ -72,4 +73,17 @@ pub fn save_agent_settings(
 #[tauri::command]
 pub fn get_agent_settings(state: State<AgentState>) -> Result<Option<AgentSettings>, String> {
     get_saved_agent_settings(&state)
+}
+
+pub fn build_project_sync_request_from_state(
+    state: &AgentState,
+) -> Result<ProjectSyncRequest, String> {
+    let settings =
+        get_saved_agent_settings(state)?.ok_or_else(|| "agent is not configured".to_string())?;
+    let projects = state
+        .projects
+        .lock()
+        .map_err(|_| "project registry locked".to_string())?
+        .list();
+    sync_projects_from_registry(&settings, projects).map_err(|error| error.to_string())
 }

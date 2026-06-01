@@ -1,6 +1,9 @@
 use codex_transit_agent::{
     agent_config::{AgentConfig, AgentSettings},
-    commands::{get_saved_agent_settings, save_agent_settings_in_state, AgentState},
+    commands::{
+        build_project_sync_request_from_state, get_saved_agent_settings,
+        save_agent_settings_in_state, AgentState,
+    },
     project_registry::ProjectRegistry,
 };
 
@@ -52,4 +55,40 @@ fn saves_and_reads_settings_through_agent_state_helpers() {
     save_agent_settings_in_state(&state, settings.clone()).unwrap();
 
     assert_eq!(get_saved_agent_settings(&state).unwrap(), Some(settings));
+}
+
+#[test]
+fn builds_project_sync_request_from_agent_state() {
+    let state = AgentState::default();
+    let settings = AgentSettings {
+        server_url: "http://localhost:4000".to_string(),
+        device_id: "00000000-0000-4000-8000-000000000003".to_string(),
+        device_token: "device-token".to_string(),
+    };
+
+    save_agent_settings_in_state(&state, settings).unwrap();
+    state
+        .projects
+        .lock()
+        .unwrap()
+        .add_project(std::env::temp_dir())
+        .unwrap();
+
+    let request = build_project_sync_request_from_state(&state).unwrap();
+
+    assert_eq!(
+        request.url.as_str(),
+        "http://localhost:4000/agent/projects/sync"
+    );
+    assert_eq!(request.device_token, "device-token");
+    assert!(request.body.contains("\"projects\":["));
+}
+
+#[test]
+fn rejects_project_sync_request_when_agent_is_unconfigured() {
+    let state = AgentState::default();
+
+    let err = build_project_sync_request_from_state(&state).unwrap_err();
+
+    assert!(err.contains("agent is not configured"));
 }

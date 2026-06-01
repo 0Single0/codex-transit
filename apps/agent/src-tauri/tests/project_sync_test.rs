@@ -1,4 +1,10 @@
-use codex_transit_agent::project_sync::{build_project_sync_request, SyncProject};
+use std::path::PathBuf;
+
+use codex_transit_agent::{
+    agent_config::AgentSettings,
+    project_registry::ProjectEntry,
+    project_sync::{build_project_sync_request, sync_projects_from_registry, SyncProject},
+};
 
 #[test]
 fn builds_project_sync_request_with_device_token_header() {
@@ -10,13 +16,46 @@ fn builds_project_sync_request_with_device_token_header() {
             agent_key: "local-1".to_string(),
             display_name: "codex-transit".to_string(),
             path_alias: "codex-transit".to_string(),
-            available: true
-        }]
+            available: true,
+        }],
     )
     .unwrap();
 
-    assert_eq!(request.url.as_str(), "http://localhost:4000/agent/projects/sync");
+    assert_eq!(
+        request.url.as_str(),
+        "http://localhost:4000/agent/projects/sync"
+    );
     assert_eq!(request.device_token, "device-token");
-    assert!(request.body.contains("\"deviceId\":\"00000000-0000-4000-8000-000000000003\""));
+    assert!(request
+        .body
+        .contains("\"deviceId\":\"00000000-0000-4000-8000-000000000003\""));
     assert!(request.body.contains("\"agentKey\":\"local-1\""));
+}
+
+#[test]
+fn maps_local_projects_to_sync_request_from_saved_settings() {
+    let settings = AgentSettings {
+        server_url: "https://relay.example.com".to_string(),
+        device_id: "00000000-0000-4000-8000-000000000003".to_string(),
+        device_token: "device-token".to_string(),
+    };
+    let projects = vec![ProjectEntry {
+        project_id: "00000000-0000-4000-8000-000000000004".parse().unwrap(),
+        display_name: "codex-transit".to_string(),
+        path_alias: "codex-transit".to_string(),
+        root: PathBuf::from("C:/projects/codex-transit"),
+        available: true,
+    }];
+
+    let request = sync_projects_from_registry(&settings, projects).unwrap();
+
+    assert_eq!(
+        request.url.as_str(),
+        "https://relay.example.com/agent/projects/sync"
+    );
+    assert_eq!(request.device_token, "device-token");
+    assert!(request
+        .body
+        .contains("\"agentKey\":\"00000000-0000-4000-8000-000000000004\""));
+    assert!(request.body.contains("\"displayName\":\"codex-transit\""));
 }
