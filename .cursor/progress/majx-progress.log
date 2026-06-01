@@ -533,3 +533,13 @@
 涉及文件：
   - apps/agent/src-tauri/src/codex_history.rs：规范化 Windows verbatim 路径前缀
   - apps/agent/src-tauri/tests/codex_history_test.rs：补充 \\?\ 路径匹配测试
+[2026-06-01]
+用户输入：为什么 Codex 启动失败 program not found 还是不行
+完成：增强 Windows Agent 启动 Codex CLI 的命令解析与错误诊断 (majx)
+  - Windows 下执行 codex.cmd 时使用 COMSPEC/System32 的绝对 cmd.exe，避免 GUI Agent PATH 缺失导致 cmd 本身找不到
+  - spawn 失败时把实际尝试启动的命令和参数写进错误上下文，手机端可直接看到诊断信息
+  - 补充 cmd.exe 绝对路径包装和启动错误信息回归测试
+
+涉及文件：
+  - apps/agent/src-tauri/src/codex_adapter.rs：使用绝对 cmd.exe 包装 .cmd，并增强 spawn 错误上下文
+  - apps/agent/src-tauri/tests/codex_adapter_test.rs：补充命令包装和错误信息测试

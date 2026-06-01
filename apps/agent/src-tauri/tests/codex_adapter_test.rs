@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use codex_transit_agent::codex_adapter::{
-    prepare_command_invocation, resolve_codex_command_from_path, CodexAdapter, CodexExecOptions,
+    format_spawn_error, prepare_command_invocation, prepare_command_invocation_with_cmd,
+    resolve_codex_command_from_path, CodexAdapter, CodexExecOptions,
 };
 
 #[test]
@@ -74,13 +75,14 @@ fn prefers_windows_cmd_wrapper_over_extensionless_shim() {
 
 #[test]
 fn prepares_windows_cmd_files_for_process_spawn() {
-    let invocation = prepare_command_invocation(
+    let invocation = prepare_command_invocation_with_cmd(
         PathBuf::from("D:/nodejs/codex.cmd"),
         vec!["exec".to_string(), "-".to_string()],
+        || Some(PathBuf::from("C:/Windows/System32/cmd.exe")),
     );
 
     if cfg!(windows) {
-        assert_eq!(invocation.program, "cmd");
+        assert_eq!(invocation.program, "C:/Windows/System32/cmd.exe");
         assert_eq!(
             invocation.args,
             vec!["/C", "D:/nodejs/codex.cmd", "exec", "-"]
@@ -89,4 +91,20 @@ fn prepares_windows_cmd_files_for_process_spawn() {
         assert_eq!(invocation.program, "D:/nodejs/codex.cmd");
         assert_eq!(invocation.args, vec!["exec", "-"]);
     }
+}
+
+#[test]
+fn formats_spawn_errors_with_attempted_command() {
+    let invocation = prepare_command_invocation(
+        PathBuf::from("D:/nodejs/codex.cmd"),
+        vec!["exec".to_string(), "-".to_string()],
+    );
+    let message = format!("{:?}", std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "program not found",
+    ));
+    let message = format!("{}: {}", format_spawn_error(&invocation), message);
+
+    assert!(message.contains("program not found"));
+    assert!(message.contains("D:/nodejs/codex.cmd"));
 }

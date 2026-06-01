@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, Command},
@@ -136,13 +136,14 @@ impl CodexAdapter {
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
         let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
-        let mut child = Command::new(invocation.program)
-            .args(invocation.args)
+        let mut child = Command::new(&invocation.program)
+            .args(&invocation.args)
             .current_dir(working_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .with_context(|| format_spawn_error(&invocation))?;
 
         let mut stdin = child.stdin.take().expect("child stdin should be piped");
         stdin.write_all(prompt.as_bytes()).await?;
@@ -250,11 +251,22 @@ fn common_codex_directories() -> Vec<PathBuf> {
 }
 
 pub fn prepare_command_invocation(program: PathBuf, args: Vec<String>) -> ProcessInvocation {
+    prepare_command_invocation_with_cmd(program, args, default_cmd_program)
+}
+
+pub fn prepare_command_invocation_with_cmd(
+    program: PathBuf,
+    args: Vec<String>,
+    cmd_program: impl Fn() -> Option<PathBuf>,
+) -> ProcessInvocation {
     if cfg!(windows) && program.extension().and_then(|value| value.to_str()) == Some("cmd") {
         let mut wrapped_args = vec!["/C".to_string(), program.to_string_lossy().to_string()];
         wrapped_args.extend(args);
         return ProcessInvocation {
-            program: "cmd".to_string(),
+            program: cmd_program()
+                .unwrap_or_else(|| PathBuf::from("cmd"))
+                .to_string_lossy()
+                .to_string(),
             args: wrapped_args,
         };
     }
@@ -262,6 +274,27 @@ pub fn prepare_command_invocation(program: PathBuf, args: Vec<String>) -> Proces
         program: program.to_string_lossy().to_string(),
         args,
     }
+}
+
+fn default_cmd_program() -> Option<PathBuf> {
+    env::var_os("COMSPEC")
+        .map(PathBuf::from)
+        .filter(|path| path.exists())
+        .or_else(|| {
+            let system_root = env::var_os("SystemRoot")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("C:/Windows"));
+            let candidate = system_root.join("System32").join("cmd.exe");
+            candidate.exists().then_some(candidate)
+        })
+}
+
+pub fn format_spawn_error(invocation: &ProcessInvocation) -> String {
+    format!(
+        "failed to start Codex command: {} {}",
+        invocation.program,
+        invocation.args.join(" ")
+    )
 }
 
 impl CodexSessionProcess {
