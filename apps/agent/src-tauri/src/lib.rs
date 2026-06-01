@@ -1,3 +1,6 @@
+pub mod path_guard;
+pub mod project_registry;
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
