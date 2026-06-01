@@ -148,11 +148,36 @@ button {
   padding: 8px 10px;
 }
 
-.bind-code {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.pairing-panel {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  align-items: stretch;
   gap: 12px;
+}
+
+.pairing-qr {
+  display: grid;
+  min-height: 168px;
+  place-items: center;
+  border: 1px solid #d9e1e5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.pairing-qr img {
+  width: 148px;
+  height: 148px;
+}
+
+.pairing-qr span {
+  color: #5f6f78;
+  font-size: 0.9rem;
+}
+
+.bind-code {
+  display: grid;
+  align-content: center;
+  gap: 8px;
   border: 1px dashed #8aa0aa;
   border-radius: 8px;
   padding: 12px;
@@ -162,6 +187,19 @@ button {
 .bind-code strong {
   font-size: 1.35rem;
   letter-spacing: 0;
+}
+
+@media (max-width: 560px) {
+  .top-bar,
+  .pairing-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .top-bar {
+    display: grid;
+    align-items: start;
+    gap: 12px;
+  }
 }
 
 .message-row {
