@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../../plugins/auth";
 import { connectionRegistry } from "../realtime/realtime.gateway";
-import { toSessionSummary } from "./session.service";
+import { buildSessionRealtimeBase, toSessionSummary } from "./session.service";
 
 export async function registerSessionRoutes(app: FastifyInstance) {
   app.get("/projects/:projectId/sessions", async (request) => {
@@ -52,7 +52,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id }
+      where: { id: params.sessionId, userId: user.id },
+      include: { project: { select: { agentKey: true } } }
     });
     if (!session) return reply.code(404).send({ error: "session_not_found" });
 
@@ -60,10 +61,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       type: "session.start",
       eventId: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      userId: user.id,
-      deviceId: session.deviceId,
-      projectId: session.projectId,
-      sessionId: session.id
+      ...buildSessionRealtimeBase(session)
     };
 
     const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
@@ -77,7 +75,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const body = z.object({ text: z.string().min(1) }).parse(request.body);
     const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id }
+      where: { id: params.sessionId, userId: user.id },
+      include: { project: { select: { agentKey: true } } }
     });
     if (!session) return reply.code(404).send({ error: "session_not_found" });
 
@@ -89,10 +88,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       type: "session.input",
       eventId: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      userId: user.id,
-      deviceId: session.deviceId,
-      projectId: session.projectId,
-      sessionId: session.id,
+      ...buildSessionRealtimeBase(session),
       text: body.text
     };
 
@@ -105,7 +101,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id }
+      where: { id: params.sessionId, userId: user.id },
+      include: { project: { select: { agentKey: true } } }
     });
     if (!session) return reply.code(404).send({ error: "session_not_found" });
 
@@ -113,10 +110,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       type: "session.stop",
       eventId: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      userId: user.id,
-      deviceId: session.deviceId,
-      projectId: session.projectId,
-      sessionId: session.id
+      ...buildSessionRealtimeBase(session)
     };
 
     const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
@@ -130,7 +124,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const body = z.object({ relativePath: z.string().min(1) }).parse(request.body);
     const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id }
+      where: { id: params.sessionId, userId: user.id },
+      include: { project: { select: { agentKey: true } } }
     });
     if (!session) return reply.code(404).send({ error: "session_not_found" });
 
@@ -140,10 +135,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       eventId: crypto.randomUUID(),
       requestId,
       timestamp: new Date().toISOString(),
-      userId: user.id,
-      deviceId: session.deviceId,
-      projectId: session.projectId,
-      sessionId: session.id,
+      ...buildSessionRealtimeBase(session),
       relativePath: body.relativePath
     };
 

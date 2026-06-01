@@ -21,3 +21,18 @@ export function toSessionSummary(session: {
     updatedAt: session.updatedAt.toISOString()
   };
 }
+
+export function buildSessionRealtimeBase(session: {
+  id: string;
+  userId: string;
+  deviceId: string;
+  projectId: string;
+  project?: { agentKey: string } | null;
+}) {
+  return {
+    userId: session.userId,
+    deviceId: session.deviceId,
+    projectId: session.project?.agentKey ?? session.projectId,
+    sessionId: session.id
+  };
+}
