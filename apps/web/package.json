@@ -13,6 +13,7 @@
   "dependencies": {
     "@codex-transit/shared": "workspace:*",
     "@vitejs/plugin-react": "^4.3.4",
+    "axios": "^1.16.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

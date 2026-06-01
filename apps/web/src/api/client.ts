@@ -8,26 +8,28 @@ import type {
   SessionSummary,
   TerminalOutputChunk
 } from "@codex-transit/shared";
+import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from "axios";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 export class ApiClient {
-  constructor(
-    private token: string | null,
-    private fetcher: typeof fetch = fetch
-  ) {}
+  private http: AxiosInstance;
+
+  constructor(private token: string | null, http: AxiosInstance = axios.create({ baseURL: API_BASE })) {
+    this.http = http;
+  }
 
   async login(email: string, password: string): Promise<LoginResponse> {
     return this.request("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password })
+      data: { email, password }
     });
   }
 
   async register(email: string, password: string): Promise<LoginResponse> {
     return this.request("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password })
+      data: { email, password }
     });
   }
 
@@ -42,7 +44,7 @@ export class ApiClient {
   async claimAgentLogin(pairingToken: string): Promise<{ deviceId: string }> {
     return this.request("/devices/agent-login/claim", {
       method: "POST",
-      body: JSON.stringify({ pairingToken })
+      data: { pairingToken }
     });
   }
 
@@ -69,14 +71,14 @@ export class ApiClient {
   async createSession(deviceId: string, projectId: string, title: string): Promise<SessionSummary> {
     return this.request("/sessions", {
       method: "POST",
-      body: JSON.stringify({ deviceId, projectId, title })
+      data: { deviceId, projectId, title }
     });
   }
 
   async sendSessionInput(sessionId: string, text: string): Promise<{ ok: boolean }> {
     return this.request(`/sessions/${sessionId}/input`, {
       method: "POST",
-      body: JSON.stringify({ text })
+      data: { text }
     });
   }
 
@@ -91,29 +93,34 @@ export class ApiClient {
   async requestDiff(sessionId: string, relativePath: string): Promise<{ ok: boolean; requestId: string }> {
     return this.request(`/sessions/${sessionId}/diff`, {
       method: "POST",
-      body: JSON.stringify({ relativePath })
+      data: { relativePath }
     });
   }
 
-  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await this.fetcher(`${API_BASE}${path}`, {
-      ...init,
-      headers: {
-        "content-type": "application/json",
-        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
-        ...init.headers
-      }
-    });
-    if (!response.ok) {
-      let message = `Request failed: ${response.status}`;
-      try {
-        const body = (await response.json()) as { error?: string; issues?: Array<{ message?: string }> };
-        message = body.issues?.[0]?.message ?? body.error ?? message;
-      } catch {
-        // Keep the generic HTTP status message when the response body is not JSON.
-      }
-      throw new Error(message);
+  async request<T>(path: string, config: AxiosRequestConfig = {}): Promise<T> {
+    try {
+      const response = await this.http.request<T>({
+        url: path,
+        ...config,
+        headers: {
+          "content-type": "application/json",
+          ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+          ...config.headers
+        }
+      });
+      return response.data;
+    } catch (caught) {
+      throw new Error(readAxiosErrorMessage(caught));
     }
-    return response.json();
   }
+}
+
+function readAxiosErrorMessage(error: unknown) {
+  if (!isAxiosErrorWithData(error)) return error instanceof Error ? error.message : String(error);
+  const data = error.response?.data;
+  return data?.issues?.[0]?.message ?? data?.error ?? `Request failed: ${error.response?.status ?? "unknown"}`;
+}
+
+function isAxiosErrorWithData(error: unknown): error is AxiosError<{ error?: string; issues?: Array<{ message?: string }> }> {
+  return axios.isAxiosError(error);
 }

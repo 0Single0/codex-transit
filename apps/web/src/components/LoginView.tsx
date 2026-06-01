@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react";
+import { authErrorMessage } from "../authErrors";
 import type { WebMessages } from "../i18n";
 
 export function LoginView(props: {
@@ -24,8 +25,8 @@ export function LoginView(props: {
       } else {
         await props.onRegister(email, password);
       }
-    } catch {
-      setError(mode === "login" ? props.labels.loginFailed : props.labels.registerFailed);
+    } catch (caught) {
+      setError(authErrorMessage(caught, mode, props.labels));
     }
   }
 

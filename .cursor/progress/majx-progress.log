@@ -388,3 +388,18 @@
   - apps/web/src/i18n.ts：新增密码长度提示文案
   - apps/web/src/api/client.ts：透传服务端错误消息
   - apps/web/src/api/client.test.ts：覆盖失败请求错误信息
+
+[2026-06-01]
+用户输入：不能用axios吗
+完成：Web API 客户端迁移 axios 并修复 fetch Illegal invocation (majx)
+  - 将 Web ApiClient 从原生 fetch 改为 axios 实例，避免浏览器 fetch this 绑定问题
+  - 保留后端 validation_error/email_already_registered 等错误信息透传
+  - 新增邮箱已注册/密码错误的登录注册错误映射
+
+涉及文件：
+  - apps/web/src/api/client.ts：改用 axios 请求与错误解析
+  - apps/web/src/api/client.test.ts：改为 axios 实例注入测试
+  - apps/web/src/authErrors.ts、apps/web/src/authErrors.test.ts：新增认证错误文案映射
+  - apps/web/src/components/LoginView.tsx：显示明确认证错误提示
+  - apps/web/src/i18n.ts：补充邮箱已注册和密码错误文案
+  - apps/web/package.json、pnpm-lock.yaml：加入 axios 依赖
