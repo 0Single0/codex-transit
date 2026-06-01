@@ -106,6 +106,19 @@ pub enum RealtimeEvent {
         stream: String,
         text: String
     },
+    #[serde(rename = "codex.turn.completed", rename_all = "camelCase")]
+    CodexTurnCompleted {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        codex_session_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        turn_id: Option<String>
+    },
     #[serde(rename = "file.changed", rename_all = "camelCase")]
     FileChanged {
         event_id: Uuid,

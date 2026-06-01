@@ -55,6 +55,17 @@ export function buildStartAndInputEvents(
   codexSessionId?: string
 ) {
   const base = buildSessionRealtimeBase(session);
+  const inputEvent = {
+    type: "session.input",
+    eventId: clock.eventId(),
+    timestamp: clock.now(),
+    ...base,
+    ...(codexSessionId ? { codexSessionId } : {}),
+    text
+  };
+  if (codexSessionId) {
+    return [inputEvent];
+  }
   return [
     {
       type: "session.start",
@@ -62,14 +73,7 @@ export function buildStartAndInputEvents(
       timestamp: clock.now(),
       ...base
     },
-    {
-      type: "session.input",
-      eventId: clock.eventId(),
-      timestamp: clock.now(),
-      ...base,
-      ...(codexSessionId ? { codexSessionId } : {}),
-      text
-    }
+    inputEvent
   ];
 }
 

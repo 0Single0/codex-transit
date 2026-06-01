@@ -30,6 +30,9 @@ export function SessionConsole(props: {
   const [isWaitingResponse, setIsWaitingResponse] = useState(false);
   const [lastSendAt, setLastSendAt] = useState<number | null>(null);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
+  const userMessageSeq = useRef(0);
+  const submitLock = useRef(false);
+  const lastSubmit = useRef<{ text: string; at: number } | null>(null);
   const timeoutHandle = useRef<number | null>(null);
   const waitingStartAt = useRef<number | null>(null);
   const conversation = useMemo(() => buildConversationItems([], output), [output]);
@@ -45,6 +48,17 @@ export function SessionConsole(props: {
   ];
 
   useEffect(() => {
+    setOutput([]);
+    setUserMessages([]);
+    userMessageSeq.current = 0;
+    setIsWaitingResponse(false);
+    if (timeoutHandle.current) {
+      window.clearTimeout(timeoutHandle.current);
+      timeoutHandle.current = null;
+    }
+  }, [props.sessionId]);
+
+  useEffect(() => {
     const stream = connectSessionStream({
       token: props.token,
       sessionId: props.sessionId,
@@ -57,8 +71,15 @@ export function SessionConsole(props: {
             window.clearTimeout(timeoutHandle.current);
             timeoutHandle.current = null;
           }
-          setIsWaitingResponse(false);
           setOutput((current) => [...current, event]);
+          return;
+        }
+        if (event.type === "codex.turn.completed") {
+          if (timeoutHandle.current) {
+            window.clearTimeout(timeoutHandle.current);
+            timeoutHandle.current = null;
+          }
+          setIsWaitingResponse(false);
         }
       }
     });
@@ -135,13 +156,20 @@ export function SessionConsole(props: {
         onSubmit={async (event) => {
           event.preventDefault();
           const text = prompt.trim();
-          if (!text || isSending) return;
+          if (!text || isSending || isWaitingResponse || submitLock.current) return;
+          const now = Date.now();
+          if (lastSubmit.current && lastSubmit.current.text === text && now - lastSubmit.current.at < 1200) {
+            return;
+          }
+          submitLock.current = true;
+          lastSubmit.current = { text, at: now };
           setSendError(null);
           setIsSending(true);
           setPrompt("");
+          const messageId = `local-user-${props.sessionId}-${userMessageSeq.current++}`;
           setUserMessages((current) => [
             ...current,
-            { id: `local-user-${Date.now()}`, role: "user", text }
+            { id: messageId, role: "user", text }
           ]);
           try {
             await props.onSend(text);
@@ -166,6 +194,7 @@ export function SessionConsole(props: {
             }
           } finally {
             setIsSending(false);
+            submitLock.current = false;
           }
         }}
       >
@@ -180,7 +209,7 @@ export function SessionConsole(props: {
           <button
             aria-label={props.labels.send}
             className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-violet-600 text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!prompt.trim() || isSending}
+            disabled={!prompt.trim() || isSending || isWaitingResponse}
             type="submit"
           >
             <SendHorizontal className="h-5 w-5" />

@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     codex_adapter::{
         format_error_chain, CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput,
-        CODEX_THREAD_ID_PREFIX,
+        CODEX_THREAD_ID_PREFIX, CODEX_TURN_COMPLETED_PREFIX,
     },
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
@@ -162,6 +162,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                     .await
             }
             RealtimeEvent::CodexOutputChunk { .. }
+            | RealtimeEvent::CodexTurnCompleted { .. }
             | RealtimeEvent::CodexHistoryResult { .. }
             | RealtimeEvent::CodexHistoryDetailResult { .. }
             | RealtimeEvent::FileChanged { .. }
@@ -185,13 +186,19 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
     async fn start_session_with_context(
         &mut self,
         session_id: Uuid,
-        context: SessionContext,
+        mut context: SessionContext,
     ) -> Result<()> {
         let Some(project_root) = self.projects.get(&context.project_id).cloned() else {
             bail!("project is not registered");
         };
+        if context.codex_session_id.is_none() {
+            context.codex_session_id = self
+                .contexts
+                .get(&session_id)
+                .and_then(|current| current.codex_session_id.clone());
+        }
         self.contexts.insert(session_id, context);
-        self.output_seq.insert(session_id, 0);
+        self.output_seq.entry(session_id).or_insert(0);
         let _ = project_root;
         Ok(())
     }
@@ -262,6 +269,32 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                         .to_string(),
                 );
             }
+            return Ok(());
+        }
+        if output.stream == OutputStream::Stdout
+            && output.text.starts_with(CODEX_TURN_COMPLETED_PREFIX)
+        {
+            let Some(context) = self.contexts.get(&output.session_id).cloned() else {
+                bail!("session is not running");
+            };
+            self.outbound_tx
+                .send(RealtimeEvent::CodexTurnCompleted {
+                    event_id: Uuid::new_v4(),
+                    timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                    user_id: context.user_id,
+                    device_id: context.device_id,
+                    project_id: context.project_id,
+                    session_id: output.session_id,
+                    codex_session_id: context.codex_session_id.clone(),
+                    turn_id: Some(
+                        output
+                            .text
+                            .trim_start_matches(CODEX_TURN_COMPLETED_PREFIX)
+                            .to_string(),
+                    )
+                    .filter(|value| !value.is_empty()),
+                })
+                .await?;
             return Ok(());
         }
         let event = self.output_to_event(output)?;

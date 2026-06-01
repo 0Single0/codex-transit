@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codexHistoryDetailResultSchema, codexHistoryRequestSchema, codexHistoryResultSchema, codexOutputChunkSchema, fileChangedSchema, realtimeEventSchema } from "./events";
+import { codexHistoryDetailResultSchema, codexHistoryRequestSchema, codexHistoryResultSchema, codexOutputChunkSchema, codexTurnCompletedSchema, fileChangedSchema, realtimeEventSchema } from "./events";
 
 const base = {
   eventId: "00000000-0000-4000-8000-000000000001",
@@ -21,6 +21,16 @@ describe("realtime event schemas", () => {
     });
 
     expect(parsed.seq).toBe(1);
+  });
+
+  it("parses codex turn completed events", () => {
+    const parsed = codexTurnCompletedSchema.parse({
+      ...base,
+      type: "codex.turn.completed",
+      turnId: "turn_1"
+    });
+
+    expect(parsed.turnId).toBe("turn_1");
   });
 
   it("rejects empty file paths from file change events", () => {

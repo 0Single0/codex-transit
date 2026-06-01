@@ -63,6 +63,11 @@ export const codexOutputChunkSchema = sessionBaseSchema.extend({
   text: z.string()
 });
 
+export const codexTurnCompletedSchema = sessionBaseSchema.extend({
+  type: z.literal("codex.turn.completed"),
+  turnId: z.string().min(1).optional()
+});
+
 export const fileChangedSchema = sessionBaseSchema.extend({
   type: z.literal("file.changed"),
   relativePath: z.string().min(1),
@@ -144,6 +149,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
   sessionStopSchema,
   sessionStatusSchema,
   codexOutputChunkSchema,
+  codexTurnCompletedSchema,
   fileChangedSchema,
   diffRequestSchema,
   diffResultSchema,
@@ -156,6 +162,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
 export type CodexOutputChunk = z.infer<typeof codexOutputChunkSchema>;
+export type CodexTurnCompleted = z.infer<typeof codexTurnCompletedSchema>;
 export type FileChangedEvent = z.infer<typeof fileChangedSchema>;
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type CodexHistoryItem = z.infer<typeof codexHistoryItemSchema>;

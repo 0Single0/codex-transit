@@ -16,6 +16,7 @@ use uuid::Uuid;
 use crate::path_utils::normalize_for_windows_process_path;
 
 pub const CODEX_THREAD_ID_PREFIX: &str = "__CODEX_THREAD_ID__:";
+pub const CODEX_TURN_COMPLETED_PREFIX: &str = "__CODEX_TURN_COMPLETED__:";
 
 #[derive(Debug)]
 pub struct ProcessOutput {
@@ -178,27 +179,7 @@ impl CodexAdapter {
             });
         }
         if let Some(stderr) = child.stderr.take() {
-            let tx = output_tx;
-            tokio::spawn(async move {
-                let mut stderr = stderr;
-                let mut buffer = vec![0_u8; 4096];
-                loop {
-                    let Ok(read) = stderr.read(&mut buffer).await else {
-                        break;
-                    };
-                    if read == 0 {
-                        break;
-                    }
-                    let text = String::from_utf8_lossy(&buffer[..read]).to_string();
-                    let _ = tx
-                        .send(ProcessOutput {
-                            session_id,
-                            stream: OutputStream::Stderr,
-                            text,
-                        })
-                        .await;
-                }
-            });
+            maybe_forward_stderr(stderr, session_id, output_tx);
         }
 
         Ok(CodexSessionProcess { child })
@@ -261,27 +242,7 @@ if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
             });
         }
         if let Some(stderr) = child.stderr.take() {
-            let tx = output_tx;
-            tokio::spawn(async move {
-                let mut stderr = stderr;
-                let mut buffer = vec![0_u8; 4096];
-                loop {
-                    let Ok(read) = stderr.read(&mut buffer).await else {
-                        break;
-                    };
-                    if read == 0 {
-                        break;
-                    }
-                    let text = String::from_utf8_lossy(&buffer[..read]).to_string();
-                    let _ = tx
-                        .send(ProcessOutput {
-                            session_id,
-                            stream: OutputStream::Stderr,
-                            text,
-                        })
-                        .await;
-                }
-            });
+            maybe_forward_stderr(stderr, session_id, output_tx);
         }
 
         Ok(CodexSessionProcess { child })
@@ -417,6 +378,39 @@ fn escape_ps_single_quoted(value: &str) -> String {
     value.replace('\'', "''")
 }
 
+fn maybe_forward_stderr<R: AsyncRead + Unpin + Send + 'static>(
+    stderr: R,
+    session_id: Uuid,
+    output_tx: mpsc::Sender<ProcessOutput>,
+) {
+    let forward_stderr = env::var("CODEX_TRANSIT_FORWARD_STDERR")
+        .map(|value| value == "1")
+        .unwrap_or(false);
+    if !forward_stderr {
+        return;
+    }
+    tokio::spawn(async move {
+        let mut stderr = stderr;
+        let mut buffer = vec![0_u8; 4096];
+        loop {
+            let Ok(read) = stderr.read(&mut buffer).await else {
+                break;
+            };
+            if read == 0 {
+                break;
+            }
+            let text = String::from_utf8_lossy(&buffer[..read]).to_string();
+            let _ = output_tx
+                .send(ProcessOutput {
+                    session_id,
+                    stream: OutputStream::Stderr,
+                    text,
+                })
+                .await;
+        }
+    });
+}
+
 async fn forward_codex_json_output<R: AsyncRead + Unpin>(
     mut reader: R,
     session_id: Uuid,
@@ -475,6 +469,20 @@ async fn handle_codex_json_line(line: &str, session_id: Uuid, output_tx: &mpsc::
                 })
                 .await;
         }
+        return;
+    }
+    if kind == "turn.completed" {
+        let turn_id = value
+            .get("turn_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let _ = output_tx
+            .send(ProcessOutput {
+                session_id,
+                stream: OutputStream::Stdout,
+                text: format!("{CODEX_TURN_COMPLETED_PREFIX}{turn_id}"),
+            })
+            .await;
         return;
     }
     if kind != "item.completed" {

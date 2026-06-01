@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildConversationItems } from "./conversationItems";
 
 describe("buildConversationItems", () => {
-  it("combines user prompts and terminal output into chat items", () => {
+  it("keeps each codex output chunk as an independent bubble", () => {
     expect(
       buildConversationItems(
         [{ id: "m1", role: "user", text: "帮我加登录" }],
@@ -13,7 +13,8 @@ describe("buildConversationItems", () => {
       )
     ).toEqual([
       { id: "m1", role: "user", text: "帮我加登录" },
-      { id: "codex-output", role: "codex", text: "Thinking...\nDone" }
+      { id: "codex-output-0", role: "codex", text: "Thinking..." },
+      { id: "codex-output-1", role: "codex", text: "Done" }
     ]);
   });
 });

@@ -15,13 +15,16 @@ export function buildConversationItems(
     role: message.role === "user" ? "user" as const : "codex" as const,
     text: message.text
   }));
-  const outputText = output.map((chunk) => chunk.text).join("\n").trim();
-  if (outputText) {
+
+  for (const chunk of output) {
+    const text = chunk.text.trim();
+    if (!text) continue;
     items.push({
-      id: "codex-output",
+      id: `codex-output-${chunk.seq}`,
       role: "codex",
-      text: outputText
+      text
     });
   }
+
   return items;
 }
