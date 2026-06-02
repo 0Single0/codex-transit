@@ -17,6 +17,7 @@ use crate::path_utils::normalize_for_windows_process_path;
 
 pub const CODEX_THREAD_ID_PREFIX: &str = "__CODEX_THREAD_ID__:";
 pub const CODEX_TURN_COMPLETED_PREFIX: &str = "__CODEX_TURN_COMPLETED__:";
+pub const CODEX_TURN_FAILED_PREFIX: &str = "__CODEX_TURN_FAILED__:";
 
 #[derive(Debug)]
 pub struct ProcessOutput {
@@ -481,6 +482,25 @@ async fn handle_codex_json_line(line: &str, session_id: Uuid, output_tx: &mpsc::
                 session_id,
                 stream: OutputStream::Stdout,
                 text: format!("{CODEX_TURN_COMPLETED_PREFIX}{turn_id}"),
+            })
+            .await;
+        return;
+    }
+    if kind == "turn.failed" {
+        let turn_id = value
+            .get("turn_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let message = value
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or("Codex turn failed");
+        let _ = output_tx
+            .send(ProcessOutput {
+                session_id,
+                stream: OutputStream::Stdout,
+                text: format!("{CODEX_TURN_FAILED_PREFIX}{turn_id}|{message}"),
             })
             .await;
         return;

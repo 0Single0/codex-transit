@@ -119,6 +119,20 @@ pub enum RealtimeEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         turn_id: Option<String>
     },
+    #[serde(rename = "codex.turn.failed", rename_all = "camelCase")]
+    CodexTurnFailed {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        codex_session_id: Option<String>,
+        message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        turn_id: Option<String>
+    },
     #[serde(rename = "file.changed", rename_all = "camelCase")]
     FileChanged {
         event_id: Uuid,

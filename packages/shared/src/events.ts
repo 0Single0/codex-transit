@@ -68,6 +68,12 @@ export const codexTurnCompletedSchema = sessionBaseSchema.extend({
   turnId: z.string().min(1).optional()
 });
 
+export const codexTurnFailedSchema = sessionBaseSchema.extend({
+  type: z.literal("codex.turn.failed"),
+  message: z.string().min(1),
+  turnId: z.string().min(1).optional()
+});
+
 export const fileChangedSchema = sessionBaseSchema.extend({
   type: z.literal("file.changed"),
   relativePath: z.string().min(1),
@@ -150,6 +156,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
   sessionStatusSchema,
   codexOutputChunkSchema,
   codexTurnCompletedSchema,
+  codexTurnFailedSchema,
   fileChangedSchema,
   diffRequestSchema,
   diffResultSchema,
@@ -163,6 +170,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
 export type CodexOutputChunk = z.infer<typeof codexOutputChunkSchema>;
 export type CodexTurnCompleted = z.infer<typeof codexTurnCompletedSchema>;
+export type CodexTurnFailed = z.infer<typeof codexTurnFailedSchema>;
 export type FileChangedEvent = z.infer<typeof fileChangedSchema>;
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type CodexHistoryItem = z.infer<typeof codexHistoryItemSchema>;

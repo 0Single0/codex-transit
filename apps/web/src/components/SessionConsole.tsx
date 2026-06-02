@@ -1,4 +1,4 @@
-import type { CodexHistoryMessage, RealtimeEvent, TerminalOutputChunk } from "@codex-transit/shared";
+﻿import type { CodexHistoryMessage, RealtimeEvent, TerminalOutputChunk } from "@codex-transit/shared";
 import { ChevronLeft, Clock3, SendHorizontal, TerminalSquare } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
@@ -28,13 +28,11 @@ export function SessionConsole(props: {
   const [isSending, setIsSending] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [isWaitingResponse, setIsWaitingResponse] = useState(false);
-  const [lastSendAt, setLastSendAt] = useState<number | null>(null);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
   const userMessageSeq = useRef(0);
   const submitLock = useRef(false);
   const lastSubmit = useRef<{ text: string; at: number } | null>(null);
   const timeoutHandle = useRef<number | null>(null);
-  const waitingStartAt = useRef<number | null>(null);
   const conversation = useMemo(() => buildConversationItems([], output), [output]);
   const historyConversation = props.historyMessages.map((message) => ({
     id: message.id,
@@ -80,6 +78,15 @@ export function SessionConsole(props: {
             timeoutHandle.current = null;
           }
           setIsWaitingResponse(false);
+          return;
+        }
+        if (event.type === "codex.turn.failed") {
+          if (timeoutHandle.current) {
+            window.clearTimeout(timeoutHandle.current);
+            timeoutHandle.current = null;
+          }
+          setIsWaitingResponse(false);
+          setSendError(event.message);
         }
       }
     });
@@ -93,7 +100,7 @@ export function SessionConsole(props: {
   }, [props.token, props.sessionId]);
 
   return (
-    <section className="grid min-h-[calc(100vh-32px)] grid-rows-[auto_1fr_auto] px-4 pb-4 pt-4 text-white">
+    <section className="grid h-[calc(100vh-32px)] grid-rows-[auto_1fr_auto] overflow-hidden px-4 pb-4 pt-4 text-white">
       <header className="grid grid-cols-[44px_1fr_44px] items-center gap-3">
         <button
           className="grid h-11 w-11 place-items-center rounded-full bg-white/[0.06] text-slate-200"
@@ -134,7 +141,6 @@ export function SessionConsole(props: {
               }`}
               key={item.id}
             >
-              <strong className="text-xs font-semibold opacity-70">{item.role === "user" ? props.labels.you : "Codex"}</strong>
               <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-6">{item.text}</pre>
             </article>
           ))
@@ -173,9 +179,7 @@ export function SessionConsole(props: {
           ]);
           try {
             await props.onSend(text);
-            setLastSendAt(Date.now());
             setIsWaitingResponse(true);
-            waitingStartAt.current = Date.now();
             if (timeoutHandle.current) {
               window.clearTimeout(timeoutHandle.current);
             }
@@ -216,12 +220,6 @@ export function SessionConsole(props: {
           </button>
         </div>
         {sendError ? <p className="px-2 pb-1 text-sm text-red-300">{sendError}</p> : null}
-        {lastSendAt ? <p className="px-2 pb-1 text-[11px] text-slate-500">最后发送时间: {new Date(lastSendAt).toLocaleTimeString()}</p> : null}
-        {isWaitingResponse && waitingStartAt.current ? (
-          <p className="px-2 pb-1 text-[11px] text-slate-500">
-            已等待: {Math.max(1, Math.floor((Date.now() - waitingStartAt.current) / 1000))}s
-          </p>
-        ) : null}
       </form>
     </section>
   );

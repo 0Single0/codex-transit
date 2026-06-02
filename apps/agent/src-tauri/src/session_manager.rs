@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     codex_adapter::{
         format_error_chain, CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput,
-        CODEX_THREAD_ID_PREFIX, CODEX_TURN_COMPLETED_PREFIX,
+        CODEX_THREAD_ID_PREFIX, CODEX_TURN_COMPLETED_PREFIX, CODEX_TURN_FAILED_PREFIX,
     },
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
@@ -163,6 +163,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             }
             RealtimeEvent::CodexOutputChunk { .. }
             | RealtimeEvent::CodexTurnCompleted { .. }
+            | RealtimeEvent::CodexTurnFailed { .. }
             | RealtimeEvent::CodexHistoryResult { .. }
             | RealtimeEvent::CodexHistoryDetailResult { .. }
             | RealtimeEvent::FileChanged { .. }
@@ -293,6 +294,34 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                             .to_string(),
                     )
                     .filter(|value| !value.is_empty()),
+                })
+                .await?;
+            return Ok(());
+        }
+        if output.stream == OutputStream::Stdout
+            && output.text.starts_with(CODEX_TURN_FAILED_PREFIX)
+        {
+            let Some(context) = self.contexts.get(&output.session_id).cloned() else {
+                bail!("session is not running");
+            };
+            let payload = output
+                .text
+                .trim_start_matches(CODEX_TURN_FAILED_PREFIX)
+                .to_string();
+            let mut parts = payload.splitn(2, '|');
+            let turn_id = parts.next().unwrap_or_default().trim().to_string();
+            let message = parts.next().unwrap_or("Codex turn failed").trim().to_string();
+            self.outbound_tx
+                .send(RealtimeEvent::CodexTurnFailed {
+                    event_id: Uuid::new_v4(),
+                    timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                    user_id: context.user_id,
+                    device_id: context.device_id,
+                    project_id: context.project_id,
+                    session_id: output.session_id,
+                    codex_session_id: context.codex_session_id.clone(),
+                    message,
+                    turn_id: if turn_id.is_empty() { None } else { Some(turn_id) },
                 })
                 .await?;
             return Ok(());
