@@ -1,5 +1,5 @@
 import type { CodexHistoryMessage, CodexModel, RealtimeEvent } from "@codex-transit/shared";
-import { Clock3, TerminalSquare } from "lucide-react";
+import { ChevronLeft, Clock3, Ellipsis, TerminalSquare } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { connectSessionStream } from "../../api/realtime";
 import {
@@ -13,7 +13,6 @@ import type { WebMessages } from "../../i18n";
 import { ChatComposer, type ComposerModelOption } from "../../components/ChatComposer";
 import { ConversationMessage } from "../../components/ConversationMessage";
 import { LiveTurnBubble } from "../../components/LiveTurnBubble";
-import { PageHeader } from "../../components/PageHeader";
 import type { ApprovalPolicy } from "../../components/ComposerMenus";
 
 type UserMessage = Extract<ConversationItem, { kind: "message"; role: "user" }>;
@@ -294,7 +293,7 @@ export function SessionConsoleContainer(props: {
   ]);
 
   return (
-    <section className="grid h-full min-h-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#f0f4f7] text-slate-900">
+    <section className="grid h-full min-h-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[radial-gradient(circle_at_top,_#ffffff_0%,_#f7fafe_38%,_#f7fafe_100%)] text-slate-900">
       <style>{`
         .codex-scrollbar {
           scrollbar-width: thin;
@@ -340,44 +339,63 @@ export function SessionConsoleContainer(props: {
         type="file"
       />
 
-      <PageHeader
-        onBack={props.onBack}
-        rightSlot={(
+      <header className="px-5 pb-2 pt-5 text-slate-900">
+        <div className="grid grid-cols-[44px_1fr_auto] items-start gap-3">
           <button
-            className="grid h-11 w-11 place-items-center rounded-full bg-white text-slate-500 shadow-[0_8px_24px_rgba(148,163,184,0.18)]"
-            onClick={props.onHistory}
+            className="grid place-items-center rounded-full text-slate-500 ring-1 ring-white/80"
+            onClick={props.onBack}
+            style={{
+              background:'#f4f5f7',
+              width:"36px",
+              height:'36px'
+            }}
             type="button"
           >
-            <Clock3 className="h-5 w-5" />
+            <ChevronLeft className="h-5 w-5" />
           </button>
-        )}
-        subtitle={props.projectPath}
-        title={props.projectName}
-      />
-
-      <div className="px-5">
-        <p className={`mt-1 text-center text-[11px] ${isRealtimeConnected ? "text-emerald-600" : "text-amber-600"}`}>
-          {isDraft ? props.labels.startCodexChatHint : isRealtimeConnected ? props.labels.realtimeConnected : props.labels.realtimeDisconnected}
-        </p>
-      </div>
-
-      <div className="codex-scrollbar min-h-0 space-y-7 overflow-y-auto px-5 pb-6 pt-4">
-        {visibleConversation.length ? (
-          visibleConversation.map((item) => (
-            <ConversationMessage item={item} key={item.id} labels={props.labels} />
-          ))
-        ) : (
-          <section className="grid h-full min-h-[440px] place-items-center text-center">
-            <div>
-              <div className="mx-auto grid h-20 w-20 place-items-center rounded-[24px] bg-white text-slate-500 shadow-[0_18px_40px_rgba(148,163,184,0.16)]">
-                <TerminalSquare className="h-9 w-9" />
-              </div>
-              <h2 className="mt-5 text-xl font-semibold text-slate-900">{props.labels.startCodexChat}</h2>
-              <p className="mx-auto mt-2 max-w-[280px] text-sm leading-6 text-slate-500">{props.labels.startCodexChatHint}</p>
+          <div className="min-w-0 pt-0.5 text-center">
+            <h1 className="truncate text-[20px] font-semibold tracking-[-0.02em] text-slate-900">{props.projectName}</h1>
+            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-600">
+              <span className={`h-2 w-2 rounded-full ${isRealtimeConnected ? "bg-emerald-500" : "bg-amber-500"}`} />
+              <span>{isRealtimeConnected ? props.labels.online : props.labels.offline}</span>
             </div>
-          </section>
-        )}
-        {liveTurn ? <LiveTurnBubble labels={props.labels} liveTurn={liveTurn} /> : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="grid  place-items-center rounded-full text-slate-500  ring-1 ring-white/80"
+              onClick={props.onHistory}
+                 style={{
+              background:'#f4f5f7',
+              width:"36px",
+              height:'36px'
+            }}
+              type="button"
+            >
+              <Clock3 className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="codex-scrollbar min-h-0 overflow-y-auto px-5 pb-6 pt-1">
+        <div className="space-y-5">
+          {visibleConversation.length ? (
+            visibleConversation.map((item) => (
+              <ConversationMessage item={item} key={item.id} labels={props.labels} />
+            ))
+          ) : (
+            <section className="grid h-full min-h-[440px] place-items-center text-center">
+              <div>
+                <div className="mx-auto grid h-20 w-20 place-items-center rounded-[24px] bg-white text-slate-500 shadow-[0_18px_40px_rgba(148,163,184,0.16)]">
+                  <TerminalSquare className="h-9 w-9" />
+                </div>
+                <h2 className="mt-5 text-xl font-semibold text-slate-900">{props.labels.startCodexChat}</h2>
+                <p className="mx-auto mt-2 max-w-[280px] text-sm leading-6 text-slate-500">{props.labels.startCodexChatHint}</p>
+              </div>
+            </section>
+          )}
+          {liveTurn ? <LiveTurnBubble labels={props.labels} liveTurn={liveTurn} /> : null}
+        </div>
       </div>
 
       <div className="px-4 pb-4 pt-2">

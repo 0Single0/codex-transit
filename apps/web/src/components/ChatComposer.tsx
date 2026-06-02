@@ -58,7 +58,7 @@ export function ChatComposer(props: {
 
   return (
     <form
-      className="relative grid gap-3 rounded-[30px] bg-white px-3 pb-3 pt-3 shadow-[0_20px_44px_rgba(148,163,184,0.2)] ring-1 ring-slate-200/80"
+      className="relative grid gap-4 rounded-[20px] bg-white px-4 pb-4 pt-4 shadow-[0_18px_44px_rgba(148,163,184,0.16)] ring-1 ring-slate-200/80"
       onSubmit={props.onSubmit}
       ref={rootRef}
     >
@@ -69,22 +69,18 @@ export function ChatComposer(props: {
           ))}
         </div>
       ) : null}
-
-      <div className="rounded-[22px] bg-[#f4f7fb] px-3 py-2">
         <textarea
-          className="min-h-[52px] w-full resize-none bg-transparent text-[15px] leading-7 text-slate-900 outline-none placeholder:text-slate-400"
+          className="min-h-[40px] w-full resize-none bg-transparent text-[14px] leading-7 text-slate-900 outline-none placeholder:text-[#9aa6bf]"
           value={props.prompt}
           onChange={(event) => props.onPromptChange(event.target.value)}
           placeholder={props.labels.promptPlaceholder}
-          rows={3}
+          rows={2}
         />
-      </div>
-
-      <div className="grid grid-cols-[1fr_auto] items-center gap-3 px-1 py-0.5">
+      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="relative">
             <button
-              className="grid h-9 w-9 place-items-center rounded-full bg-[#f3f6fa] text-slate-600 transition hover:bg-slate-200"
+              className="grid h-8 w-8 place-items-center rounded-full bg-[#f4f5f7] text-slate-600 transition hover:bg-slate-200"
               onClick={() => {
                 setModelMenuOpen(false);
                 props.onTogglePlusMenu();
@@ -106,7 +102,7 @@ export function ChatComposer(props: {
           </div>
 
           <button
-            className="inline-flex h-9 items-center gap-2 rounded-full bg-amber-50 px-3 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100"
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-amber-50 px-3.5 text-[12px] font-medium text-amber-700 transition hover:bg-amber-100"
             onClick={() => {
               setModelMenuOpen(false);
               props.onOpenApprovalMenu();
@@ -139,7 +135,7 @@ export function ChatComposer(props: {
 
         <button
           aria-label={props.labels.send}
-          className="grid h-10 w-10 place-items-center rounded-full bg-sky-600 text-white shadow-[0_12px_28px_rgba(14,165,233,0.24)] transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+          className="grid h-9 w-9 place-items-center self-end rounded-full bg-[#3b82f6] text-white shadow-[0_14px_30px_rgba(59,130,246,0.26)] transition hover:bg-[#2f76ea] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
           disabled={!props.prompt.trim() || props.disabled}
           type="submit"
         >

@@ -86,7 +86,7 @@ function parseMessageBlocks(text: string): MessageBlock[] {
 }
 
 function toneClass(tone: "user" | "codex") {
-  return tone === "user" ? "text-slate-900" : "text-slate-800";
+  return tone === "user" ? "text-slate-900" : "text-slate-700";
 }
 
 function fileCardClass(tone: "user" | "codex") {

@@ -10,10 +10,18 @@ export function LiveTurnBubble(props: {
   const waiting = props.liveTurn.status === "waiting";
 
   return (
-    <article className="w-full px-1">
-      <div className="relative">
-        {waiting ? <span className="mb-2 inline-flex h-1.5 w-1.5 rounded-full bg-sky-500 align-middle shadow-[0_0_0_6px_rgba(14,165,233,0.08)]" /> : null}
-        <MessageRichText text={text || (waiting ? props.labels.modelThinking : "")} tone="codex" />
+    <article className="w-full px-1 text-left">
+      <div className="inline-flex max-w-[88%] items-center gap-3 rounded-full bg-white/88 px-4 py-2 text-sm text-slate-500 shadow-[0_8px_22px_rgba(148,163,184,0.1)] ring-1 ring-slate-200/70">
+        {waiting ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-sky-300" />
+            <span className="h-2 w-2 rounded-full bg-sky-400" />
+            <span className="h-2 w-2 rounded-full bg-sky-300" />
+          </span>
+        ) : null}
+        <span className="min-w-0 text-sm leading-6">
+          <MessageRichText text={text || (waiting ? props.labels.modelThinking : "")} tone="codex" />
+        </span>
       </div>
     </article>
   );

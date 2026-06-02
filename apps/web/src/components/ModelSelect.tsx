@@ -16,7 +16,7 @@ export function ModelSelect(props: {
   return (
     <div className="relative">
       <button
-        className="inline-flex h-9 w-fit max-w-[48vw] items-center gap-2 rounded-full bg-[#f3f6fa] px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-9 w-fit max-w-[48vw] items-center gap-2 rounded-full bg-[#f4f6fa] px-3.5 py-1.5 text-sm text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={props.disabled}
         onClick={props.onToggle}
         type="button"
