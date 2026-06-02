@@ -127,6 +127,9 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             }
             RealtimeEvent::SessionInput {
                 session_id,
+                user_id,
+                device_id,
+                project_id,
                 codex_session_id,
                 model,
                 plan_mode,
@@ -135,6 +138,16 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                 text,
                 ..
             } => {
+                self.ensure_session_context(
+                    session_id,
+                    SessionContext {
+                        user_id,
+                        device_id,
+                        project_id,
+                        codex_session_id: codex_session_id.clone(),
+                    },
+                )
+                .await?;
                 self.send_input_with_codex_session(
                     session_id,
                     codex_session_id,
@@ -233,6 +246,17 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         self.output_seq.entry(session_id).or_insert(0);
         let _ = project_root;
         Ok(())
+    }
+
+    async fn ensure_session_context(
+        &mut self,
+        session_id: Uuid,
+        context: SessionContext,
+    ) -> Result<()> {
+        if self.contexts.contains_key(&session_id) {
+            return Ok(());
+        }
+        self.start_session_with_context(session_id, context).await
     }
 
     pub async fn send_input(&mut self, session_id: Uuid, text: String) -> Result<()> {

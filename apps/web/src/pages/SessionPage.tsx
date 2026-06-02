@@ -138,6 +138,18 @@ export function SessionPage() {
       selectedModel={selectedModel ?? models.defaultModel ?? null}
       sessionId={sessionId}
       pendingInitialMessage={locationState?.pendingInitialMessage ?? null}
+      onPendingInitialMessageHandled={() => {
+        if (!locationState?.pendingInitialMessage) return;
+        navigate(location.pathname, {
+          replace: true,
+          state: locationState?.historyMessages || locationState?.codexSessionId
+            ? {
+                ...(locationState.historyMessages ? { historyMessages: locationState.historyMessages } : {}),
+                ...(locationState.codexSessionId ? { codexSessionId: locationState.codexSessionId } : {})
+              }
+            : null
+        });
+      }}
       token={token}
     />
   );

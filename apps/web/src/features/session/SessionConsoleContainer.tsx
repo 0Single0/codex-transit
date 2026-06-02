@@ -41,6 +41,7 @@ export function SessionConsoleContainer(props: {
     approvalPolicy: ApprovalPolicy;
     attachments: AttachmentItem[];
   } | null;
+  onPendingInitialMessageHandled?: () => void;
   onCreateRuntimeSession?: () => Promise<string>;
   onDraftSessionReady?: (
     sessionId: string,
@@ -78,6 +79,7 @@ export function SessionConsoleContainer(props: {
   const lastSubmit = useRef<{ text: string; at: number } | null>(null);
   const timeoutHandle = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const initialMessageConsumedForSession = useRef<string | null>(null);
 
   const historyConversation = useMemo(
     () => historyMessagesToConversation(props.historyMessages),
@@ -113,6 +115,7 @@ export function SessionConsoleContainer(props: {
       window.clearTimeout(timeoutHandle.current);
       timeoutHandle.current = null;
     }
+    initialMessageConsumedForSession.current = null;
   }, [props.sessionId]);
 
   useEffect(() => {
@@ -215,7 +218,9 @@ export function SessionConsoleContainer(props: {
   useEffect(() => {
     if (!props.sessionId || !props.pendingInitialMessage || !isRealtimeConnected) return;
     if (submitLock.current) return;
+    if (initialMessageConsumedForSession.current === props.sessionId) return;
 
+    initialMessageConsumedForSession.current = props.sessionId;
     submitLock.current = true;
     setIsSending(true);
     setUserMessages((current) => (
@@ -237,6 +242,7 @@ export function SessionConsoleContainer(props: {
       errorMessage: null,
       turnKey: `${props.sessionId}-initial`
     });
+    props.onPendingInitialMessageHandled?.();
 
     void props.onSend(
       props.pendingInitialMessage.text,
@@ -262,9 +268,27 @@ export function SessionConsoleContainer(props: {
         return null;
       });
     }).finally(() => {
+      if (timeoutHandle.current) {
+        window.clearTimeout(timeoutHandle.current);
+      }
+      timeoutHandle.current = window.setTimeout(() => {
+        setLiveTurn((current) => current ? {
+          ...current,
+          status: "waiting",
+          text: props.labels.waitingForOutput
+        } : current);
+      }, 45000);
       submitLock.current = false;
     });
-  }, [isRealtimeConnected, props]);
+  }, [
+    isRealtimeConnected,
+    props.labels.sendFailed,
+    props.labels.waitingForOutput,
+    props.onPendingInitialMessageHandled,
+    props.onSend,
+    props.pendingInitialMessage,
+    props.sessionId
+  ]);
 
   return (
     <section className="grid h-full min-h-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#f0f4f7] text-slate-900">
