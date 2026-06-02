@@ -357,7 +357,7 @@ export function SessionConsoleContainer(props: {
             <h1 className="truncate text-[20px] font-semibold tracking-[-0.02em] text-slate-900">{props.projectName}</h1>
             <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-600">
               <span className={`h-2 w-2 rounded-full ${isRealtimeConnected ? "bg-emerald-500" : "bg-amber-500"}`} />
-              <span>{isRealtimeConnected ? props.labels.online : props.labels.offline}</span>
+              <span>{isRealtimeConnected ? props.labels.realtimeConnected : props.labels.realtimeDisconnected}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">

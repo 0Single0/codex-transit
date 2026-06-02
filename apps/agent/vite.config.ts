@@ -4,6 +4,12 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5175
+    port: 5175,
+    watch: {
+      ignored: [
+        "**/src-tauri/target/**",
+        "**/src-tauri/target-local/**"
+      ]
+    }
   }
 });

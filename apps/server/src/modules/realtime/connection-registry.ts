@@ -1,4 +1,8 @@
-type Sender = { send: (message: string) => void };
+type Sender = {
+  send: (message: string) => void;
+  readyState?: number;
+  OPEN?: number;
+};
 
 export class ConnectionRegistry {
   private readonly agents = new Map<string, Sender>();
@@ -47,6 +51,10 @@ export class ConnectionRegistry {
   sendToAgent(deviceId: string, payload: unknown) {
     const sender = this.agents.get(deviceId);
     if (!sender) return false;
+    if (!isSenderOpen(sender)) {
+      this.agents.delete(deviceId);
+      return false;
+    }
     sender.send(JSON.stringify(payload));
     return true;
   }
@@ -55,7 +63,17 @@ export class ConnectionRegistry {
     const viewers = this.viewersBySession.get(sessionId);
     if (!viewers) return 0;
     const message = JSON.stringify(payload);
-    for (const viewer of viewers) viewer.send(message);
+    for (const viewer of [...viewers]) {
+      if (!isSenderOpen(viewer)) {
+        viewers.delete(viewer);
+        continue;
+      }
+      viewer.send(message);
+    }
+    if (viewers.size === 0) {
+      this.viewersBySession.delete(sessionId);
+      return 0;
+    }
     return viewers.size;
   }
 
@@ -67,11 +85,28 @@ export class ConnectionRegistry {
     const viewers = this.viewersByDevice.get(deviceId);
     if (!viewers) return 0;
     const message = JSON.stringify(payload);
-    for (const viewer of viewers) viewer.send(message);
+    for (const viewer of [...viewers]) {
+      if (!isSenderOpen(viewer)) {
+        viewers.delete(viewer);
+        continue;
+      }
+      viewer.send(message);
+    }
+    if (viewers.size === 0) {
+      this.viewersByDevice.delete(deviceId);
+      return 0;
+    }
     return viewers.size;
   }
 
   cacheLatestDeviceModels(deviceId: string, payload: unknown) {
     this.latestDeviceModelsPayload.set(deviceId, payload);
   }
+}
+
+function isSenderOpen(sender: Sender) {
+  if (typeof sender.readyState === "number" && typeof sender.OPEN === "number") {
+    return sender.readyState === sender.OPEN;
+  }
+  return true;
 }
