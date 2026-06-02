@@ -1,9 +1,8 @@
 import type { CodexHistoryMessage, CodexModel, RealtimeEvent } from "@codex-transit/shared";
-import { ChevronLeft, Clock3, Ellipsis, TerminalSquare } from "lucide-react";
+import { ChevronLeft, Clock3, TerminalSquare } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { connectSessionStream } from "../../api/realtime";
 import {
-  finalizeLiveTurn,
   historyMessagesToConversation,
   type AttachmentItem,
   type ConversationItem,
@@ -16,6 +15,7 @@ import { LiveTurnBubble } from "../../components/LiveTurnBubble";
 import type { ApprovalPolicy } from "../../components/ComposerMenus";
 
 type UserMessage = Extract<ConversationItem, { kind: "message"; role: "user" }>;
+type CodexMessage = Extract<ConversationItem, { kind: "message"; role: "codex" }>;
 type ToolConversationItem = Extract<ConversationItem, { kind: "tool" }>;
 
 export function SessionConsoleContainer(props: {
@@ -65,6 +65,7 @@ export function SessionConsoleContainer(props: {
   const [isSending, setIsSending] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [conversationItems, setConversationItems] = useState<ConversationItem[]>([]);
+  const [liveConversationItems, setLiveConversationItems] = useState<ConversationItem[]>([]);
   const [liveTurn, setLiveTurn] = useState<LiveTurnState | null>(null);
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>("full");
@@ -76,6 +77,7 @@ export function SessionConsoleContainer(props: {
   const timeoutHandle = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const initialMessageConsumedForSession = useRef<string | null>(null);
+  const liveConversationItemsRef = useRef<ConversationItem[]>([]);
 
   const historyConversation = useMemo(
     () => historyMessagesToConversation(props.historyMessages),
@@ -84,7 +86,8 @@ export function SessionConsoleContainer(props: {
 
   const visibleConversation: ConversationItem[] = [
     ...historyConversation,
-    ...conversationItems
+    ...conversationItems,
+    ...liveConversationItems
   ];
 
   const modelOptions: ComposerModelOption[] = props.models.map((model) => ({
@@ -94,8 +97,13 @@ export function SessionConsoleContainer(props: {
   }));
 
   useEffect(() => {
+    liveConversationItemsRef.current = liveConversationItems;
+  }, [liveConversationItems]);
+
+  useEffect(() => {
     revokeAttachmentPreviews(attachments);
     setConversationItems([]);
+    setLiveConversationItems([]);
     setLiveTurn(null);
     setAttachments([]);
     setPrompt("");
@@ -108,11 +116,35 @@ export function SessionConsoleContainer(props: {
       timeoutHandle.current = null;
     }
     initialMessageConsumedForSession.current = null;
+    liveConversationItemsRef.current = [];
   }, [props.sessionId]);
 
   useEffect(() => {
     return () => revokeAttachmentPreviews(attachments);
   }, []);
+
+  function clearLiveConversation() {
+    liveConversationItemsRef.current = [];
+    setLiveConversationItems([]);
+  }
+
+  function commitLiveConversation(extraAssistantText?: string) {
+    const nextItems = [...liveConversationItemsRef.current];
+    const trailingText = extraAssistantText?.trim();
+    if (trailingText) {
+      nextItems.push({
+        id: `live-message-${props.sessionId ?? "draft"}-${Date.now()}-${nextItems.length}`,
+        kind: "message",
+        role: "codex",
+        text: trailingText
+      });
+    }
+    if (nextItems.length) {
+      setConversationItems((current) => [...current, ...nextItems]);
+    }
+    clearLiveConversation();
+    setLiveTurn(null);
+  }
 
   useEffect(() => {
     if (!props.sessionId) {
@@ -132,19 +164,37 @@ export function SessionConsoleContainer(props: {
             window.clearTimeout(timeoutHandle.current);
             timeoutHandle.current = null;
           }
-          setLiveTurn((current) => {
-            if (!current) return current;
-            return {
-              ...current,
-              status: "streaming",
-              text: `${current.text}${event.text}`
+          setLiveTurn((current) => current ? { ...current, status: "streaming" } : current);
+          setLiveConversationItems((current) => {
+            const lastItem = current.at(-1);
+            if (lastItem?.kind === "message" && lastItem.role === "codex") {
+              return current.map((item, index) => (
+                index === current.length - 1 && item.kind === "message" && item.role === "codex"
+                  ? {
+                      ...item,
+                      text: `${item.text}${event.text}`
+                    }
+                  : item
+              ));
+            }
+
+            const nextMessage: CodexMessage = {
+              id: `live-output-${props.sessionId}-${Date.now()}-${current.length}`,
+              kind: "message",
+              role: "codex",
+              text: event.text
             };
+            return [...current, nextMessage];
           });
           return;
         }
 
         if (event.type === "codex.tool.call") {
-          setConversationItems((current) => {
+          setLiveTurn((current) => current ? {
+            ...current,
+            status: current.status === "waiting" ? "streaming" : current.status
+          } : current);
+          setLiveConversationItems((current) => {
             const nextToolItem: ToolConversationItem = {
               id: event.itemId,
               kind: "tool",
@@ -174,14 +224,7 @@ export function SessionConsoleContainer(props: {
             timeoutHandle.current = null;
           }
           setIsSending(false);
-          setLiveTurn((current) => {
-            const completed = current ? { ...current, status: "completed" as const } : current;
-            const finalized = finalizeLiveTurn(completed);
-            if (finalized) {
-              setConversationItems((messages) => [...messages, finalized]);
-            }
-            return null;
-          });
+          commitLiveConversation();
           return;
         }
 
@@ -191,19 +234,7 @@ export function SessionConsoleContainer(props: {
             timeoutHandle.current = null;
           }
           setIsSending(false);
-          setLiveTurn((current) => {
-            const failed = current ? {
-              ...current,
-              status: "failed" as const,
-              errorMessage: event.message,
-              text: event.message
-            } : current;
-            const finalized = finalizeLiveTurn(failed);
-            if (finalized) {
-              setConversationItems((messages) => [...messages, finalized]);
-            }
-            return null;
-          });
+          commitLiveConversation(event.message);
         }
       }
     });
@@ -219,6 +250,7 @@ export function SessionConsoleContainer(props: {
 
   useEffect(() => {
     if (!props.sessionId || !props.pendingInitialMessage || !isRealtimeConnected) return;
+    const initialMessage = props.pendingInitialMessage;
     if (submitLock.current) return;
     if (initialMessageConsumedForSession.current === props.sessionId) return;
 
@@ -232,12 +264,13 @@ export function SessionConsoleContainer(props: {
             id: `local-user-${props.sessionId}-initial`,
             kind: "message",
             role: "user",
-            text: props.pendingInitialMessage!.text,
-            ...(props.pendingInitialMessage!.attachments.length
-              ? { attachments: props.pendingInitialMessage!.attachments }
+            text: initialMessage.text,
+            ...(initialMessage.attachments.length
+              ? { attachments: initialMessage.attachments }
               : {})
           }]
     ));
+    clearLiveConversation();
     setLiveTurn({
       status: "waiting",
       text: "",
@@ -247,28 +280,16 @@ export function SessionConsoleContainer(props: {
     props.onPendingInitialMessageHandled?.();
 
     void props.onSend(
-      props.pendingInitialMessage.text,
-      props.pendingInitialMessage.model,
+      initialMessage.text,
+      initialMessage.model,
       {
-        approvalPolicy: props.pendingInitialMessage.approvalPolicy,
-        attachments: props.pendingInitialMessage.attachments
+        approvalPolicy: initialMessage.approvalPolicy,
+        attachments: initialMessage.attachments
       }
     ).catch((caught) => {
       const message = caught instanceof Error ? caught.message : props.labels.sendFailed;
       setIsSending(false);
-      setLiveTurn((current) => {
-        const failed = current ? {
-          ...current,
-          status: "failed" as const,
-          errorMessage: message,
-          text: message
-        } : current;
-        const finalized = finalizeLiveTurn(failed);
-        if (finalized) {
-          setConversationItems((messages) => [...messages, finalized]);
-        }
-        return null;
-      });
+      commitLiveConversation(message);
     }).finally(() => {
       if (timeoutHandle.current) {
         window.clearTimeout(timeoutHandle.current);
@@ -345,9 +366,9 @@ export function SessionConsoleContainer(props: {
             className="grid place-items-center rounded-full text-slate-500 ring-1 ring-white/80"
             onClick={props.onBack}
             style={{
-              background:'#f4f5f7',
-              width:"36px",
-              height:'36px'
+              background: "#f4f5f7",
+              width: "36px",
+              height: "36px"
             }}
             type="button"
           >
@@ -362,13 +383,13 @@ export function SessionConsoleContainer(props: {
           </div>
           <div className="flex items-center gap-2">
             <button
-              className="grid  place-items-center rounded-full text-slate-500  ring-1 ring-white/80"
+              className="grid place-items-center rounded-full text-slate-500 ring-1 ring-white/80"
               onClick={props.onHistory}
-                 style={{
-              background:'#f4f5f7',
-              width:"36px",
-              height:'36px'
-            }}
+              style={{
+                background: "#f4f5f7",
+                width: "36px",
+                height: "36px"
+              }}
               type="button"
             >
               <Clock3 className="h-5 w-5" />
@@ -394,7 +415,7 @@ export function SessionConsoleContainer(props: {
               </div>
             </section>
           )}
-          {liveTurn ? <LiveTurnBubble labels={props.labels} liveTurn={liveTurn} /> : null}
+          {liveTurn && liveConversationItems.length === 0 ? <LiveTurnBubble labels={props.labels} liveTurn={liveTurn} /> : null}
         </div>
       </div>
 
@@ -449,6 +470,7 @@ export function SessionConsoleContainer(props: {
             };
             setConversationItems((current) => [...current, localUserMessage]);
             setAttachments([]);
+            clearLiveConversation();
             setLiveTurn({
               status: "waiting",
               text: "",
@@ -512,19 +534,7 @@ export function SessionConsoleContainer(props: {
                 ? props.labels.agentOffline
                 : props.labels.sendFailed;
               setIsSending(false);
-              setLiveTurn((current) => {
-                const failed = current ? {
-                  ...current,
-                  status: "failed" as const,
-                  errorMessage: message,
-                  text: message
-                } : current;
-                const finalized = finalizeLiveTurn(failed);
-                if (finalized) {
-                  setConversationItems((messages) => [...messages, finalized]);
-                }
-                return null;
-              });
+              commitLiveConversation(message);
             } finally {
               submitLock.current = false;
             }
