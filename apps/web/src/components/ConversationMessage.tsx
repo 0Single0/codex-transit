@@ -7,7 +7,7 @@ export function ConversationMessage(props: { item: ConversationItem }) {
 
   if (item.kind === "tool") {
     return (
-      <div className="mr-auto max-w-[92%]">
+      <div className="w-full px-1">
         <ToolCallCard toolCall={item.toolCall} />
       </div>
     );
@@ -15,7 +15,7 @@ export function ConversationMessage(props: { item: ConversationItem }) {
 
   const user = item.role === "user";
   return (
-    <article className={`max-w-[92%] space-y-3 ${user ? "ml-auto text-right" : "mr-auto text-left"}`}>
+    <article className={`w-full px-1 ${user ? "text-right" : "text-left"}`}>
       {item.attachments?.length ? (
         <div className={`grid gap-2 ${user ? "justify-items-end" : "justify-items-start"}`}>
           {item.attachments.map((attachment) => (
@@ -25,9 +25,17 @@ export function ConversationMessage(props: { item: ConversationItem }) {
           ))}
         </div>
       ) : null}
-      <pre className={`whitespace-pre-wrap break-words font-sans text-[15px] leading-7 ${user ? "text-white" : "text-slate-100"}`}>
-        {item.text}
-      </pre>
+      <div className={`mt-3 ${user ? "flex justify-end" : "flex justify-start"}`}>
+        <pre
+          className={`max-w-full whitespace-pre-wrap break-words rounded-[20px] px-4 py-3 font-sans text-[15px] leading-7 ${
+            user
+              ? "bg-white/[0.08] text-white shadow-[0_12px_30px_rgba(0,0,0,0.18)]"
+              : "bg-transparent px-0 py-0 text-slate-100"
+          }`}
+        >
+          {item.text}
+        </pre>
+      </div>
     </article>
   );
 }

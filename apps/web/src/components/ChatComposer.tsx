@@ -43,7 +43,7 @@ export function ChatComposer(props: {
 
   return (
     <form
-      className="relative grid gap-3 rounded-[30px] bg-[#141414] px-3 pb-3 pt-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)]"
+      className="relative grid gap-3 rounded-[28px] border border-white/10 bg-[#11161d]/96 px-3 pb-3 pt-3 shadow-[0_-12px_40px_rgba(0,0,0,0.24)] backdrop-blur"
       onSubmit={props.onSubmit}
     >
       {props.attachments.length ? (
@@ -54,21 +54,21 @@ export function ChatComposer(props: {
         </div>
       ) : null}
 
-      <div className="rounded-[24px] px-2 py-2">
+      <div className="rounded-[22px] bg-white/[0.05] px-3 py-2">
         <textarea
-          className="min-h-24 w-full resize-none bg-transparent text-[15px] leading-7 text-white outline-none placeholder:text-slate-600"
+          className="min-h-[72px] w-full resize-none bg-transparent text-[15px] leading-7 text-white outline-none placeholder:text-slate-500"
           value={props.prompt}
           onChange={(event) => props.onPromptChange(event.target.value)}
           placeholder={props.labels.promptPlaceholder}
-          rows={4}
+          rows={3}
         />
       </div>
 
-      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="relative">
             <button
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/[0.06] text-slate-200"
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/[0.06] text-slate-200 transition hover:bg-white/[0.1]"
               onClick={props.onTogglePlusMenu}
               type="button"
             >
@@ -91,7 +91,7 @@ export function ChatComposer(props: {
           </div>
 
           <button
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-[#f08c49]/12 px-3 text-xs font-medium text-[#f6a66f]"
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-[#f08c49]/20 bg-[#f08c49]/10 px-3 text-xs font-medium text-[#f6a66f] transition hover:bg-[#f08c49]/14"
             onClick={props.onOpenApprovalMenu}
             type="button"
           >
@@ -101,7 +101,7 @@ export function ChatComposer(props: {
 
           <label className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full bg-white/[0.05] px-3 py-2 text-sm text-slate-300">
             <select
-              className="min-w-0 max-w-[180px] bg-transparent text-sm text-slate-200 outline-none"
+              className="w-auto min-w-0 max-w-full appearance-none bg-transparent pr-1 text-sm text-slate-200 outline-none"
               disabled={props.modelsLoading || props.disabled}
               value={props.selectedModel ?? ""}
               onChange={(event) => props.onModelChange(event.target.value)}
@@ -125,7 +125,7 @@ export function ChatComposer(props: {
 
         <button
           aria-label={props.labels.send}
-          className="grid h-10 w-10 place-items-center rounded-full bg-white text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+          className="grid h-11 w-11 place-items-center rounded-full bg-white text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!props.prompt.trim() || props.disabled}
           type="submit"
         >

@@ -192,7 +192,26 @@ export function SessionConsole(props: {
   }, [props.token, props.sessionId]);
 
   return (
-    <section className="grid h-[calc(100vh-32px)] grid-rows-[auto_1fr_auto] overflow-hidden px-4 pb-4 pt-4 text-white">
+    <section className="grid h-[calc(100vh-32px)] grid-rows-[auto_1fr_auto] overflow-hidden bg-[#07111c] px-4 pb-4 pt-4 text-white">
+      <style>{`
+        .codex-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(148, 163, 184, 0.28) transparent;
+        }
+        .codex-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .codex-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .codex-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(148, 163, 184, 0.24);
+          border-radius: 999px;
+        }
+        .codex-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(148, 163, 184, 0.38);
+        }
+      `}</style>
       <input
         accept="image/*"
         className="hidden"
@@ -218,7 +237,7 @@ export function SessionConsole(props: {
         type="file"
       />
 
-      <header className="grid grid-cols-[44px_1fr_44px] items-center gap-3">
+      <header className="grid grid-cols-[44px_1fr_44px] items-center gap-3 border-b border-white/6 pb-4">
         <button
           className="grid h-11 w-11 place-items-center rounded-full bg-white/[0.06] text-slate-200"
           onClick={props.onBack}
@@ -242,7 +261,7 @@ export function SessionConsole(props: {
         </button>
       </header>
 
-      <div className="mt-6 min-h-0 space-y-6 overflow-y-auto pb-6 pr-1">
+      <div className="codex-scrollbar mt-4 min-h-0 space-y-7 overflow-y-auto px-1 pb-6 pt-3">
         {visibleConversation.length ? (
           visibleConversation.map((item) => <ConversationMessage item={item} key={item.id} />)
         ) : (
@@ -259,124 +278,126 @@ export function SessionConsole(props: {
         {liveTurn ? <LiveTurnBubble liveTurn={liveTurn} labels={props.labels} /> : null}
       </div>
 
-      <ChatComposer
-        labels={props.labels}
-        prompt={prompt}
-        disabled={isSending || !isRealtimeConnected}
-        sending={isSending}
-        models={modelOptions}
-        modelsLoading={props.modelsLoading}
-        modelError={props.modelError}
-        selectedModel={props.selectedModel}
-        attachments={attachments}
-        approvalPolicy={approvalPolicy}
-        plusMenuOpen={plusMenuOpen}
-        approvalMenuOpen={approvalMenuOpen}
-        onPromptChange={setPrompt}
-        onModelChange={props.onSelectModel}
-        onTogglePlusMenu={() => {
-          setPlusMenuOpen((current) => !current);
-          setApprovalMenuOpen(false);
-        }}
-        onOpenApprovalMenu={() => setApprovalMenuOpen(true)}
-        onCloseMenus={() => {
-          setPlusMenuOpen(false);
-          setApprovalMenuOpen(false);
-        }}
-        onPickFiles={() => fileInputRef.current?.click()}
-        onSelectApprovalPolicy={setApprovalPolicy}
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const text = prompt.trim();
-          if (!text || isSending || submitLock.current) return;
-          const now = Date.now();
-          if (lastSubmit.current && lastSubmit.current.text === text && now - lastSubmit.current.at < 1200) {
-            return;
-          }
-
-          submitLock.current = true;
-          lastSubmit.current = { text, at: now };
-          setPrompt("");
-          setIsSending(true);
-          setPlusMenuOpen(false);
-          setApprovalMenuOpen(false);
-          const outgoingAttachments = attachments;
-          const messageId = `local-user-${props.sessionId}-${userMessageSeq.current++}`;
-          const localUserMessage: UserMessage = {
-            id: messageId,
-            kind: "message" as const,
-            role: "user",
-            text,
-            ...(outgoingAttachments.length ? { attachments: outgoingAttachments } : {})
-          };
-          setUserMessages((current) => [...current, localUserMessage]);
-          setAttachments([]);
-          setLiveTurn({
-            status: "waiting",
-            text: "",
-            errorMessage: null,
-            turnKey: `${props.sessionId}-${Date.now()}`
-          });
-
-          try {
-            const preparedAttachments = await Promise.all(
-              outgoingAttachments.map(async (attachment) => {
-                if (attachment.uploadedPath || !attachment.file) {
-                  return attachment;
-                }
-                const uploaded = await props.onUploadAttachment(attachment.file);
-                return {
-                  ...attachment,
-                  uploadedPath: uploaded.path,
-                  path: uploaded.path
-                };
-              })
-            );
-            setUserMessages((current) => current.map((message) => (
-              message.id === messageId
-                ? {
-                    ...message,
-                    attachments: preparedAttachments
-                  }
-                : message
-            )));
-            await props.onSend(text, props.selectedModel, {
-              approvalPolicy,
-              attachments: preparedAttachments
-            });
-            if (timeoutHandle.current) {
-              window.clearTimeout(timeoutHandle.current);
+      <div className="border-t border-white/6 pt-4">
+        <ChatComposer
+          labels={props.labels}
+          prompt={prompt}
+          disabled={isSending || !isRealtimeConnected}
+          sending={isSending}
+          models={modelOptions}
+          modelsLoading={props.modelsLoading}
+          modelError={props.modelError}
+          selectedModel={props.selectedModel}
+          attachments={attachments}
+          approvalPolicy={approvalPolicy}
+          plusMenuOpen={plusMenuOpen}
+          approvalMenuOpen={approvalMenuOpen}
+          onPromptChange={setPrompt}
+          onModelChange={props.onSelectModel}
+          onTogglePlusMenu={() => {
+            setPlusMenuOpen((current) => !current);
+            setApprovalMenuOpen(false);
+          }}
+          onOpenApprovalMenu={() => setApprovalMenuOpen(true)}
+          onCloseMenus={() => {
+            setPlusMenuOpen(false);
+            setApprovalMenuOpen(false);
+          }}
+          onPickFiles={() => fileInputRef.current?.click()}
+          onSelectApprovalPolicy={setApprovalPolicy}
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const text = prompt.trim();
+            if (!text || isSending || submitLock.current) return;
+            const now = Date.now();
+            if (lastSubmit.current && lastSubmit.current.text === text && now - lastSubmit.current.at < 1200) {
+              return;
             }
-            timeoutHandle.current = window.setTimeout(() => {
-              setLiveTurn((current) => current ? {
-                ...current,
-                status: "waiting",
-                text: props.labels.waitingForOutput
-              } : current);
-            }, 45000);
-          } catch (caught) {
-            const message = caught instanceof Error && caught.message.includes("agent_offline")
-              ? props.labels.agentOffline
-              : props.labels.sendFailed;
-            setIsSending(false);
-            setLiveTurn((current) => {
-              const failed = current ? {
-                ...current,
-                status: "failed" as const,
-                errorMessage: message,
-                text: message
-              } : current;
-              const finalized = finalizeLiveTurn(failed);
-              if (finalized) {
-                setAssistantMessages((messages) => [...messages, finalized]);
-              }
-              return null;
+
+            submitLock.current = true;
+            lastSubmit.current = { text, at: now };
+            setPrompt("");
+            setIsSending(true);
+            setPlusMenuOpen(false);
+            setApprovalMenuOpen(false);
+            const outgoingAttachments = attachments;
+            const messageId = `local-user-${props.sessionId}-${userMessageSeq.current++}`;
+            const localUserMessage: UserMessage = {
+              id: messageId,
+              kind: "message" as const,
+              role: "user",
+              text,
+              ...(outgoingAttachments.length ? { attachments: outgoingAttachments } : {})
+            };
+            setUserMessages((current) => [...current, localUserMessage]);
+            setAttachments([]);
+            setLiveTurn({
+              status: "waiting",
+              text: "",
+              errorMessage: null,
+              turnKey: `${props.sessionId}-${Date.now()}`
             });
-          } finally {
-            submitLock.current = false;
-          }
-        }}
-      />
+
+            try {
+              const preparedAttachments = await Promise.all(
+                outgoingAttachments.map(async (attachment) => {
+                  if (attachment.uploadedPath || !attachment.file) {
+                    return attachment;
+                  }
+                  const uploaded = await props.onUploadAttachment(attachment.file);
+                  return {
+                    ...attachment,
+                    uploadedPath: uploaded.path,
+                    path: uploaded.path
+                  };
+                })
+              );
+              setUserMessages((current) => current.map((message) => (
+                message.id === messageId
+                  ? {
+                      ...message,
+                      attachments: preparedAttachments
+                    }
+                  : message
+              )));
+              await props.onSend(text, props.selectedModel, {
+                approvalPolicy,
+                attachments: preparedAttachments
+              });
+              if (timeoutHandle.current) {
+                window.clearTimeout(timeoutHandle.current);
+              }
+              timeoutHandle.current = window.setTimeout(() => {
+                setLiveTurn((current) => current ? {
+                  ...current,
+                  status: "waiting",
+                  text: props.labels.waitingForOutput
+                } : current);
+              }, 45000);
+            } catch (caught) {
+              const message = caught instanceof Error && caught.message.includes("agent_offline")
+                ? props.labels.agentOffline
+                : props.labels.sendFailed;
+              setIsSending(false);
+              setLiveTurn((current) => {
+                const failed = current ? {
+                  ...current,
+                  status: "failed" as const,
+                  errorMessage: message,
+                  text: message
+                } : current;
+                const finalized = finalizeLiveTurn(failed);
+                if (finalized) {
+                  setAssistantMessages((messages) => [...messages, finalized]);
+                }
+                return null;
+              });
+            } finally {
+              submitLock.current = false;
+            }
+          }}
+        />
+      </div>
     </section>
   );
 }
