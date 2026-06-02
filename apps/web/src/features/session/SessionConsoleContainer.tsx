@@ -23,7 +23,7 @@ type UserMessage = Extract<ConversationItem, { kind: "message"; role: "user" }>;
 export function SessionConsoleContainer(props: {
   labels: WebMessages;
   token: string;
-  sessionId: string;
+  sessionId?: string;
   projectName: string;
   projectPath: string;
   historyMessages: CodexHistoryMessage[];
@@ -34,6 +34,23 @@ export function SessionConsoleContainer(props: {
   onBack: () => void;
   onHistory: () => void;
   onSelectModel: (model: string) => void;
+  allowDraft?: boolean;
+  pendingInitialMessage?: {
+    text: string;
+    model: string | null;
+    approvalPolicy: ApprovalPolicy;
+    attachments: AttachmentItem[];
+  } | null;
+  onCreateRuntimeSession?: () => Promise<string>;
+  onDraftSessionReady?: (
+    sessionId: string,
+    initialMessage: {
+      text: string;
+      model: string | null;
+      approvalPolicy: ApprovalPolicy;
+      attachments: AttachmentItem[];
+    }
+  ) => void;
   onSend: (
     text: string,
     model: string | null,
@@ -44,6 +61,7 @@ export function SessionConsoleContainer(props: {
   ) => Promise<void>;
   onUploadAttachment: (file: File) => Promise<{ path: string }>;
 }) {
+  const isDraft = Boolean(props.allowDraft && !props.sessionId);
   const [prompt, setPrompt] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
@@ -102,6 +120,11 @@ export function SessionConsoleContainer(props: {
   }, []);
 
   useEffect(() => {
+    if (!props.sessionId) {
+      setIsRealtimeConnected(false);
+      return;
+    }
+
     const stream = connectSessionStream({
       token: props.token,
       sessionId: props.sessionId,
@@ -189,6 +212,60 @@ export function SessionConsoleContainer(props: {
     };
   }, [props.sessionId, props.token]);
 
+  useEffect(() => {
+    if (!props.sessionId || !props.pendingInitialMessage || !isRealtimeConnected) return;
+    if (submitLock.current) return;
+
+    submitLock.current = true;
+    setIsSending(true);
+    setUserMessages((current) => (
+      current.length
+        ? current
+        : [{
+            id: `local-user-${props.sessionId}-initial`,
+            kind: "message",
+            role: "user",
+            text: props.pendingInitialMessage!.text,
+            ...(props.pendingInitialMessage!.attachments.length
+              ? { attachments: props.pendingInitialMessage!.attachments }
+              : {})
+          }]
+    ));
+    setLiveTurn({
+      status: "waiting",
+      text: "",
+      errorMessage: null,
+      turnKey: `${props.sessionId}-initial`
+    });
+
+    void props.onSend(
+      props.pendingInitialMessage.text,
+      props.pendingInitialMessage.model,
+      {
+        approvalPolicy: props.pendingInitialMessage.approvalPolicy,
+        attachments: props.pendingInitialMessage.attachments
+      }
+    ).catch((caught) => {
+      const message = caught instanceof Error ? caught.message : props.labels.sendFailed;
+      setIsSending(false);
+      setLiveTurn((current) => {
+        const failed = current ? {
+          ...current,
+          status: "failed" as const,
+          errorMessage: message,
+          text: message
+        } : current;
+        const finalized = finalizeLiveTurn(failed);
+        if (finalized) {
+          setAssistantMessages((messages) => [...messages, finalized]);
+        }
+        return null;
+      });
+    }).finally(() => {
+      submitLock.current = false;
+    });
+  }, [isRealtimeConnected, props]);
+
   return (
     <section className="grid h-full min-h-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#f0f4f7] text-slate-900">
       <style>{`
@@ -253,7 +330,7 @@ export function SessionConsoleContainer(props: {
 
       <div className="px-5">
         <p className={`mt-1 text-center text-[11px] ${isRealtimeConnected ? "text-emerald-600" : "text-amber-600"}`}>
-          {isRealtimeConnected ? props.labels.realtimeConnected : props.labels.realtimeDisconnected}
+          {isDraft ? props.labels.startCodexChatHint : isRealtimeConnected ? props.labels.realtimeConnected : props.labels.realtimeDisconnected}
         </p>
       </div>
 
@@ -281,7 +358,7 @@ export function SessionConsoleContainer(props: {
           approvalMenuOpen={approvalMenuOpen}
           approvalPolicy={approvalPolicy}
           attachments={attachments}
-          disabled={isSending || !isRealtimeConnected}
+          disabled={isSending || (!isRealtimeConnected && !isDraft)}
           labels={props.labels}
           modelError={props.modelError}
           models={modelOptions}
@@ -317,7 +394,7 @@ export function SessionConsoleContainer(props: {
             setApprovalMenuOpen(false);
 
             const outgoingAttachments = attachments;
-            const messageId = `local-user-${props.sessionId}-${userMessageSeq.current++}`;
+            const messageId = `local-user-${props.sessionId ?? "draft"}-${userMessageSeq.current++}`;
             const localUserMessage: UserMessage = {
               id: messageId,
               kind: "message",
@@ -331,7 +408,7 @@ export function SessionConsoleContainer(props: {
               status: "waiting",
               text: "",
               errorMessage: null,
-              turnKey: `${props.sessionId}-${Date.now()}`
+              turnKey: `${props.sessionId ?? "draft"}-${Date.now()}`
             });
 
             try {
@@ -355,6 +432,20 @@ export function SessionConsoleContainer(props: {
                     }
                   : message
               )));
+
+              if (isDraft) {
+                if (!props.onCreateRuntimeSession || !props.onDraftSessionReady) {
+                  throw new Error(props.labels.sendFailed);
+                }
+                const sessionId = await props.onCreateRuntimeSession();
+                props.onDraftSessionReady(sessionId, {
+                  text,
+                  model: props.selectedModel,
+                  approvalPolicy,
+                  attachments: preparedAttachments
+                });
+                return;
+              }
 
               await props.onSend(text, props.selectedModel, {
                 approvalPolicy,

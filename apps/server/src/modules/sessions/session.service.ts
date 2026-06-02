@@ -25,27 +25,34 @@ export function toSessionSummary(session: {
 }
 
 export function buildSessionRealtimeBase(session: {
-  id: string;
+  sessionId?: string;
+  id?: string;
   userId: string;
   deviceId: string;
   projectId: string;
   project?: { agentKey: string } | null;
+  agentProjectKey?: string;
+  codexSessionId?: string;
 }) {
   return {
     userId: session.userId,
     deviceId: session.deviceId,
-    projectId: session.project?.agentKey ?? session.projectId,
-    sessionId: session.id
+    projectId: session.project?.agentKey ?? session.agentProjectKey ?? session.projectId,
+    sessionId: session.sessionId ?? session.id!,
+    ...(session.codexSessionId ? { codexSessionId: session.codexSessionId } : {})
   };
 }
 
 export function buildStartAndInputEvents(
   session: {
-    id: string;
+    id?: string;
+    sessionId?: string;
     userId: string;
     deviceId: string;
     projectId: string;
     project?: { agentKey: string } | null;
+    agentProjectKey?: string;
+    codexSessionId?: string;
   },
   text: string,
   clock = {

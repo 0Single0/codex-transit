@@ -1,4 +1,5 @@
 import type {
+  CreateRuntimeSessionResponse,
   CreateBindCodeResponse,
   DeviceProjectsResponse,
   DeviceSummary,
@@ -97,6 +98,20 @@ export class ApiClient {
     return this.request("/sessions", {
       method: "POST",
       data: { deviceId, projectId, title }
+    });
+  }
+
+  async createRuntimeSession(
+    deviceId: string,
+    projectId: string,
+    input: {
+      mode: "new" | "history";
+      codexSessionId?: string;
+    }
+  ): Promise<CreateRuntimeSessionResponse> {
+    return this.request(`/devices/${deviceId}/projects/${projectId}/runtime-sessions`, {
+      method: "POST",
+      data: input
     });
   }
 

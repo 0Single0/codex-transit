@@ -1,33 +1,61 @@
-import { createSessionRequestSchema } from "@codex-transit/shared";
+import { createRuntimeSessionRequestSchema } from "@codex-transit/shared";
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../../plugins/auth";
 import { connectionRegistry } from "../realtime/realtime.gateway";
+import { runtimeSessionRegistry } from "./runtime-session-registry";
 import { buildCodexHistoryDetailRequestEvent, buildCodexHistoryRequestEvent, buildSessionRealtimeBase, buildStartAndInputEvents, toSessionSummary } from "./session.service";
 
 export async function registerSessionRoutes(app: FastifyInstance) {
-  app.get("/projects/:projectId/sessions", async (request) => {
-    const user = await requireUser(request);
-    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
-    return (await app.prisma.session.findMany({
-      where: { userId: user.id, projectId: params.projectId },
-      orderBy: { updatedAt: "desc" }
-    })).map(toSessionSummary);
+  app.get("/projects/:projectId/sessions", async () => {
+    return [];
   });
 
-  app.post("/sessions", async (request) => {
+  app.post("/sessions", async (_request, reply) => {
+    return reply.code(410).send({ error: "legacy_session_creation_disabled" });
+  });
+
+  app.post("/devices/:deviceId/projects/:projectId/runtime-sessions", async (request, reply) => {
     const user = await requireUser(request);
-    const input = createSessionRequestSchema.parse(request.body);
-    return toSessionSummary(await app.prisma.session.create({
-      data: {
-        userId: user.id,
-        deviceId: input.deviceId,
-        projectId: input.projectId,
-        title: input.title,
-        status: "idle"
+    const params = z.object({
+      deviceId: z.string().uuid(),
+      projectId: z.string().uuid()
+    }).parse(request.params);
+    const input = createRuntimeSessionRequestSchema.parse(request.body);
+    const project = await app.prisma.project.findFirst({
+      where: {
+        id: params.projectId,
+        deviceId: params.deviceId,
+        userId: user.id
+      },
+      select: {
+        agentKey: true
       }
-    }));
+    });
+    if (!project) return reply.code(404).send({ error: "project_not_found" });
+
+    if (input.mode === "history" && input.codexSessionId) {
+      const existing = runtimeSessionRegistry.findHistorySession({
+        userId: user.id,
+        deviceId: params.deviceId,
+        projectId: params.projectId,
+        codexSessionId: input.codexSessionId
+      });
+      if (existing) {
+        runtimeSessionRegistry.touch(existing.sessionId);
+        return { sessionId: existing.sessionId, reused: true };
+      }
+    }
+
+    const created = runtimeSessionRegistry.create({
+      userId: user.id,
+      deviceId: params.deviceId,
+      projectId: params.projectId,
+      agentProjectKey: project.agentKey,
+      ...(input.codexSessionId ? { codexSessionId: input.codexSessionId } : {})
+    });
+    return { sessionId: created.sessionId, reused: false };
   });
 
   app.post("/devices/:deviceId/codex-history", async (request, reply) => {
@@ -87,23 +115,19 @@ export async function registerSessionRoutes(app: FastifyInstance) {
   app.get("/sessions/:sessionId/messages", async (request) => {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
-    const exists = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id },
-      select: { id: true }
-    });
-    if (!exists) return [];
+    const exists = runtimeSessionRegistry.find(params.sessionId);
+    if (!exists || exists.userId !== user.id) return [];
+    runtimeSessionRegistry.touch(params.sessionId);
     return [];
   });
 
   app.post("/sessions/:sessionId/start", async (request, reply) => {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
-    const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id },
-      include: { project: { select: { agentKey: true } } }
-    });
-    if (!session) return reply.code(404).send({ error: "session_not_found" });
+    const session = runtimeSessionRegistry.find(params.sessionId);
+    if (!session || session.userId !== user.id) return reply.code(404).send({ error: "session_not_found" });
 
+    runtimeSessionRegistry.touch(session.sessionId);
     const event = {
       type: "session.start",
       eventId: crypto.randomUUID(),
@@ -113,7 +137,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
     const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
     if (!delivered) return reply.code(409).send({ error: "agent_offline" });
-    await app.prisma.session.update({ where: { id: session.id }, data: { status: "running" } });
+    runtimeSessionRegistry.updateStatus(session.sessionId, "running");
     return { ok: true };
   });
 
@@ -133,14 +157,16 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         kind: z.enum(["image", "file"])
       })).optional()
     }).parse(request.body);
-    const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id },
-      include: { project: { select: { agentKey: true } } }
-    });
-    if (!session) return reply.code(404).send({ error: "session_not_found" });
+    const session = runtimeSessionRegistry.find(params.sessionId);
+    if (!session || session.userId !== user.id) return reply.code(404).send({ error: "session_not_found" });
+
+    runtimeSessionRegistry.touch(session.sessionId);
+    if (body.codexSessionId) {
+      runtimeSessionRegistry.bindCodexSession(session.sessionId, body.codexSessionId);
+    }
 
     for (const event of buildStartAndInputEvents(
-      session,
+      runtimeSessionRegistry.find(params.sessionId)!,
       body.text,
       undefined,
       body.codexSessionId,
@@ -157,19 +183,17 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
       if (!delivered) return reply.code(409).send({ error: "agent_offline" });
     }
-    await app.prisma.session.update({ where: { id: session.id }, data: { status: "running" } });
+    runtimeSessionRegistry.updateStatus(session.sessionId, "running");
     return { ok: true };
   });
 
   app.post("/sessions/:sessionId/stop", async (request, reply) => {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
-    const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id },
-      include: { project: { select: { agentKey: true } } }
-    });
-    if (!session) return reply.code(404).send({ error: "session_not_found" });
+    const session = runtimeSessionRegistry.find(params.sessionId);
+    if (!session || session.userId !== user.id) return reply.code(404).send({ error: "session_not_found" });
 
+    runtimeSessionRegistry.touch(session.sessionId);
     const event = {
       type: "session.stop",
       eventId: crypto.randomUUID(),
@@ -179,7 +203,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
 
     const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
     if (!delivered) return reply.code(409).send({ error: "agent_offline" });
-    await app.prisma.session.update({ where: { id: session.id }, data: { status: "stopped" } });
+    runtimeSessionRegistry.updateStatus(session.sessionId, "stopped");
     return { ok: true };
   });
 
@@ -187,12 +211,10 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const user = await requireUser(request);
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const body = z.object({ relativePath: z.string().min(1) }).parse(request.body);
-    const session = await app.prisma.session.findFirst({
-      where: { id: params.sessionId, userId: user.id },
-      include: { project: { select: { agentKey: true } } }
-    });
-    if (!session) return reply.code(404).send({ error: "session_not_found" });
+    const session = runtimeSessionRegistry.find(params.sessionId);
+    if (!session || session.userId !== user.id) return reply.code(404).send({ error: "session_not_found" });
 
+    runtimeSessionRegistry.touch(session.sessionId);
     const requestId = crypto.randomUUID();
     const event = {
       type: "diff.request",

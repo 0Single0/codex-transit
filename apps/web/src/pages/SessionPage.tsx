@@ -11,6 +11,20 @@ import { buildProjectHistoryPath, buildProjectHomePath } from "../routes";
 type SessionPageLocationState = {
   historyMessages?: CodexHistoryMessage[];
   codexSessionId?: string;
+  pendingInitialMessage?: {
+    text: string;
+    model: string | null;
+    approvalPolicy: "default" | "auto" | "full";
+    attachments: Array<{
+      id: string;
+      name: string;
+      path: string;
+      mimeType?: string;
+      kind: "image" | "file";
+      previewUrl?: string;
+      uploadedPath?: string;
+    }>;
+  };
 };
 
 export function SessionPage() {
@@ -123,6 +137,7 @@ export function SessionPage() {
       projectPath={project.pathAlias}
       selectedModel={selectedModel ?? models.defaultModel ?? null}
       sessionId={sessionId}
+      pendingInitialMessage={locationState?.pendingInitialMessage ?? null}
       token={token}
     />
   );

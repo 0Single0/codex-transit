@@ -33,6 +33,16 @@ export const createSessionRequestSchema = z.object({
   title: z.string().min(1).max(120)
 });
 
+export const createRuntimeSessionRequestSchema = z.object({
+  mode: z.enum(["new", "history"]),
+  codexSessionId: z.string().min(1).optional()
+});
+
+export const createRuntimeSessionResponseSchema = z.object({
+  sessionId: uuidSchema,
+  reused: z.boolean()
+});
+
 export const sessionSummarySchema = z.object({
   id: uuidSchema,
   deviceId: uuidSchema,
@@ -79,6 +89,8 @@ export type LoginResponse = z.infer<typeof loginResponseSchema>;
 export type DeviceSummary = z.infer<typeof deviceSummarySchema>;
 export type CreateBindCodeResponse = z.infer<typeof createBindCodeResponseSchema>;
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
+export type CreateRuntimeSessionRequest = z.infer<typeof createRuntimeSessionRequestSchema>;
+export type CreateRuntimeSessionResponse = z.infer<typeof createRuntimeSessionResponseSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type DeviceProjectsResponse = z.infer<typeof deviceProjectsResponseSchema>;
 export type TerminalOutputChunk = z.infer<typeof terminalOutputChunkSchema>;

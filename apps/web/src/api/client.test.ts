@@ -41,6 +41,23 @@ describe("ApiClient", () => {
     });
   });
 
+  it("creates runtime bridge sessions for new chats", async () => {
+    const http = createHttpMock({ sessionId: "session-1", reused: false });
+    const api = new ApiClient("token", http);
+
+    await api.createRuntimeSession("device-1", "project-1", { mode: "new" });
+
+    expect(http.request).toHaveBeenCalledWith({
+      url: "/devices/device-1/projects/project-1/runtime-sessions",
+      method: "POST",
+      data: { mode: "new" },
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
+
   it("requests Codex history from a selected device", async () => {
     const http = createHttpMock({ ok: true, requestId: "request-1" });
     const api = new ApiClient("token", http);

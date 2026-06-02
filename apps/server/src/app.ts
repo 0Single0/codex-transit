@@ -10,11 +10,14 @@ import { registerDeviceRoutes } from "./modules/devices/device.routes";
 import { registerProjectRoutes } from "./modules/projects/project.routes";
 import { registerRealtimeGateway } from "./modules/realtime/realtime.gateway";
 import { registerSessionRoutes } from "./modules/sessions/session.routes";
+import { connectionRegistry } from "./modules/realtime/realtime.gateway";
+import { runtimeSessionRegistry } from "./modules/sessions/runtime-session-registry";
 import { authPlugin } from "./plugins/auth";
 import { prismaPlugin } from "./plugins/prisma";
 
 export async function buildApp(options: { jwtSecret: string }) {
   const app = Fastify({ logger: true });
+  runtimeSessionRegistry.start((sessionId) => connectionRegistry.countSessionViewers(sessionId));
 
   await app.register(cors, { origin: true, credentials: true });
   await app.register(jwt, { secret: options.jwtSecret });

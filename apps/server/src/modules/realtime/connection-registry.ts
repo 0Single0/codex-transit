@@ -59,6 +59,10 @@ export class ConnectionRegistry {
     return viewers.size;
   }
 
+  countSessionViewers(sessionId: string) {
+    return this.viewersBySession.get(sessionId)?.size ?? 0;
+  }
+
   broadcastToDeviceViewers(deviceId: string, payload: unknown) {
     const viewers = this.viewersByDevice.get(deviceId);
     if (!viewers) return 0;

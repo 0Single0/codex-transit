@@ -1,4 +1,4 @@
-import type { CodexHistoryItem, CodexHistoryMessage, ProjectSummary, RealtimeEvent, SessionSummary } from "@codex-transit/shared";
+import type { CodexHistoryItem, CodexHistoryMessage, ProjectSummary, RealtimeEvent } from "@codex-transit/shared";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { connectDeviceStream } from "../api/realtime";
@@ -11,7 +11,6 @@ export function ProjectHistoryPage() {
   const { deviceId = "", projectId = "" } = useParams();
   const { api, labels, runAuthorized, token } = useAppState();
   const [project, setProject] = useState<ProjectSummary | null>(null);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [history, setHistory] = useState<CodexHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -25,8 +24,6 @@ export function ProjectHistoryPage() {
     const projectResult = await runAuthorized(() => api.deviceProjects(deviceId));
     if (!projectResult) return;
     setProject(projectResult.projects.find((item) => item.projectId === projectId) ?? null);
-    const nextSessions = await runAuthorized(() => api.sessions(projectId));
-    setSessions(nextSessions ?? []);
     await loadHistory();
   }
 
@@ -79,10 +76,8 @@ export function ProjectHistoryPage() {
       api,
       deviceId,
       historyItem: item,
-      project,
-      sessions
+      project
     });
-    setSessions((current) => current.some((entry) => entry.id === session.id) ? current : [session, ...current]);
     navigate(buildSessionPath(deviceId, projectId, session.id), {
       state: {
         historyMessages,

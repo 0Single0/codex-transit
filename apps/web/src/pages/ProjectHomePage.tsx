@@ -1,17 +1,22 @@
-import type { ProjectSummary, SessionSummary } from "@codex-transit/shared";
+import type { ProjectSummary } from "@codex-transit/shared";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { SessionListView } from "../components/SessionListView";
 import { useAppState } from "../features/app/AppStateContext";
-import { pickProjectEntrySession, shouldCreateSessionOnProjectEntry } from "../projectAutoSession";
-import { buildDeviceProjectsPath, buildSessionPath } from "../routes";
+import { useDeviceModels } from "../features/devices/useDeviceModels";
+import { SessionConsoleContainer } from "../features/session/SessionConsoleContainer";
+import { buildDeviceProjectsPath, buildProjectHistoryPath, buildSessionPath } from "../routes";
 
 export function ProjectHomePage() {
   const { deviceId = "", projectId = "" } = useParams();
-  const { api, labels, runAuthorized } = useAppState();
+  const { api, labels, runAuthorized, token } = useAppState();
   const [project, setProject] = useState<ProjectSummary | null>(null);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const navigate = useNavigate();
+  const models = useDeviceModels({
+    api,
+    deviceId: deviceId || null,
+    fallbackError: labels.modelLoadFailed,
+    token
+  });
 
   useEffect(() => {
     if (!deviceId || !projectId) return;
@@ -23,18 +28,6 @@ export function ProjectHomePage() {
     if (!projectResult) return;
     const nextProject = projectResult.projects.find((item) => item.projectId === projectId) ?? null;
     setProject(nextProject);
-    if (!nextProject) return;
-
-    let nextSessions = await loadSessions();
-    if (shouldCreateSessionOnProjectEntry(nextSessions)) {
-      await api.createSession(deviceId, projectId, nextProject.displayName);
-      nextSessions = await loadSessions();
-    }
-    setSessions(nextSessions);
-  }
-
-  async function loadSessions() {
-    return (await runAuthorized(() => api.sessions(projectId))) ?? [];
   }
 
   if (!project) {
@@ -42,16 +35,41 @@ export function ProjectHomePage() {
   }
 
   return (
-    <SessionListView
+    <SessionConsoleContainer
+      allowDraft
+      historyMessages={[]}
       labels={labels}
+      modelError={models.error}
+      models={models.models}
+      modelsLoading={models.loading}
       onBack={() => navigate(buildDeviceProjectsPath(deviceId))}
-      onCreate={async (title) => {
-        const session = await api.createSession(deviceId, projectId, title);
-        setSessions((current) => [session, ...current]);
+      onCreateRuntimeSession={async () => {
+        const result = await runAuthorized(() => api.createRuntimeSession(deviceId, projectId, { mode: "new" }));
+        if (!result) throw new Error(labels.sendFailed);
+        return result.sessionId;
       }}
-      onSelect={(session) => navigate(buildSessionPath(deviceId, projectId, session.id))}
-      project={project}
-      sessions={sessions}
+      onDraftSessionReady={(sessionId, initialMessage) => {
+        navigate(buildSessionPath(deviceId, projectId, sessionId), {
+          replace: true,
+          state: {
+            pendingInitialMessage: initialMessage
+          }
+        });
+      }}
+      onHistory={() => navigate(buildProjectHistoryPath(deviceId, projectId))}
+      onSelectModel={() => undefined}
+      onSend={async () => {
+        throw new Error("draft_mode_requires_runtime_session");
+      }}
+      onUploadAttachment={async (file) => {
+        const result = await runAuthorized(() => api.uploadAttachment(file));
+        if (!result) throw new Error(labels.sendFailed);
+        return result;
+      }}
+      projectName={project.displayName}
+      projectPath={project.pathAlias}
+      selectedModel={models.defaultModel ?? null}
+      token={token ?? ""}
     />
   );
 }
