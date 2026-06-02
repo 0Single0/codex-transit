@@ -18,12 +18,12 @@ const env = {
 
 const commandMap = {
   dev: {
-    command: isWindows ? "pnpm.cmd" : "pnpm",
-    args: ["exec", "tauri", "dev"]
+    command: isWindows ? "cmd.exe" : "pnpm",
+    args: isWindows ? ["/d", "/s", "/c", "pnpm exec tauri dev"] : ["exec", "tauri", "dev"]
   },
   build: {
-    command: isWindows ? "pnpm.cmd" : "pnpm",
-    args: ["exec", "tauri", "build"]
+    command: isWindows ? "cmd.exe" : "pnpm",
+    args: isWindows ? ["/d", "/s", "/c", "pnpm exec tauri build"] : ["exec", "tauri", "build"]
   },
   "typecheck:rust": {
     command: "cargo",
