@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
+    "dev": "node scripts/run-rust-task.mjs dev",
+    "build": "node scripts/run-rust-task.mjs build",
     "lint": "pnpm typecheck",
-    "test": "vitest run --passWithNoTests && cargo test --manifest-path src-tauri/Cargo.toml --lib --tests --jobs 1",
-    "typecheck": "tsc -p tsconfig.json --noEmit && cargo check --manifest-path src-tauri/Cargo.toml"
+    "test": "vitest run --passWithNoTests && node scripts/run-rust-task.mjs test:rust",
+    "typecheck": "tsc -p tsconfig.json --noEmit && node scripts/run-rust-task.mjs typecheck:rust"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",

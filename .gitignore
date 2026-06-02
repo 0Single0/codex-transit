@@ -36,6 +36,7 @@ apps/server/prisma/migrations/dev/
 target/
 .tmp-cargo-target/
 apps/agent/src-tauri/target/
+apps/agent/src-tauri/target-local/
 apps/agent/src-tauri/gen/
 apps/agent/src-tauri/.taurignore
 

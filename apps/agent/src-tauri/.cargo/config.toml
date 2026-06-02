@@ -1,0 +1,3 @@
+[build]
+target-dir = "target-local"
+jobs = 1
