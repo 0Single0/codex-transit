@@ -7,9 +7,7 @@ import {
   historyMessagesToConversation,
   type AttachmentItem,
   type ConversationItem,
-  type LiveTurnState,
-  type LocalAssistantMessage,
-  type ToolCallItem
+  type LiveTurnState
 } from "../../conversationItems";
 import type { WebMessages } from "../../i18n";
 import { ChatComposer, type ComposerModelOption } from "../../components/ChatComposer";
@@ -19,6 +17,7 @@ import { PageHeader } from "../../components/PageHeader";
 import type { ApprovalPolicy } from "../../components/ComposerMenus";
 
 type UserMessage = Extract<ConversationItem, { kind: "message"; role: "user" }>;
+type ToolConversationItem = Extract<ConversationItem, { kind: "tool" }>;
 
 export function SessionConsoleContainer(props: {
   labels: WebMessages;
@@ -66,9 +65,7 @@ export function SessionConsoleContainer(props: {
   const [prompt, setPrompt] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
-  const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
-  const [assistantMessages, setAssistantMessages] = useState<LocalAssistantMessage[]>([]);
-  const [toolCalls, setToolCalls] = useState<ToolCallItem[]>([]);
+  const [conversationItems, setConversationItems] = useState<ConversationItem[]>([]);
   const [liveTurn, setLiveTurn] = useState<LiveTurnState | null>(null);
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>("full");
@@ -88,9 +85,7 @@ export function SessionConsoleContainer(props: {
 
   const visibleConversation: ConversationItem[] = [
     ...historyConversation,
-    ...userMessages,
-    ...assistantMessages,
-    ...toolCalls.map((toolCall) => ({ id: toolCall.id, kind: "tool" as const, toolCall }))
+    ...conversationItems
   ];
 
   const modelOptions: ComposerModelOption[] = props.models.map((model) => ({
@@ -101,9 +96,7 @@ export function SessionConsoleContainer(props: {
 
   useEffect(() => {
     revokeAttachmentPreviews(attachments);
-    setUserMessages([]);
-    setAssistantMessages([]);
-    setToolCalls([]);
+    setConversationItems([]);
     setLiveTurn(null);
     setAttachments([]);
     setPrompt("");
@@ -152,16 +145,26 @@ export function SessionConsoleContainer(props: {
         }
 
         if (event.type === "codex.tool.call") {
-          setToolCalls((current) => {
-            const next = current.filter((item) => item.id !== event.itemId);
-            next.push({
+          setConversationItems((current) => {
+            const nextToolItem: ToolConversationItem = {
               id: event.itemId,
-              command: event.command,
-              status: event.status,
-              ...(event.output ? { output: event.output } : {}),
-              ...(typeof event.exitCode === "number" ? { exitCode: event.exitCode } : {})
-            });
-            return next;
+              kind: "tool",
+              toolCall: {
+                id: event.itemId,
+                command: event.command,
+                status: event.status,
+                ...(event.output ? { output: event.output } : {}),
+                ...(typeof event.exitCode === "number" ? { exitCode: event.exitCode } : {})
+              }
+            };
+            const existingIndex = current.findIndex((item) => item.kind === "tool" && item.id === event.itemId);
+            if (existingIndex === -1) {
+              return [...current, nextToolItem];
+            }
+
+            return current.map((item, index) => (
+              index === existingIndex ? nextToolItem : item
+            ));
           });
           return;
         }
@@ -176,7 +179,7 @@ export function SessionConsoleContainer(props: {
             const completed = current ? { ...current, status: "completed" as const } : current;
             const finalized = finalizeLiveTurn(completed);
             if (finalized) {
-              setAssistantMessages((messages) => [...messages, finalized]);
+              setConversationItems((messages) => [...messages, finalized]);
             }
             return null;
           });
@@ -198,7 +201,7 @@ export function SessionConsoleContainer(props: {
             } : current;
             const finalized = finalizeLiveTurn(failed);
             if (finalized) {
-              setAssistantMessages((messages) => [...messages, finalized]);
+              setConversationItems((messages) => [...messages, finalized]);
             }
             return null;
           });
@@ -223,7 +226,7 @@ export function SessionConsoleContainer(props: {
     initialMessageConsumedForSession.current = props.sessionId;
     submitLock.current = true;
     setIsSending(true);
-    setUserMessages((current) => (
+    setConversationItems((current) => (
       current.length
         ? current
         : [{
@@ -263,7 +266,7 @@ export function SessionConsoleContainer(props: {
         } : current;
         const finalized = finalizeLiveTurn(failed);
         if (finalized) {
-          setAssistantMessages((messages) => [...messages, finalized]);
+          setConversationItems((messages) => [...messages, finalized]);
         }
         return null;
       });
@@ -426,7 +429,7 @@ export function SessionConsoleContainer(props: {
               text,
               ...(outgoingAttachments.length ? { attachments: outgoingAttachments } : {})
             };
-            setUserMessages((current) => [...current, localUserMessage]);
+            setConversationItems((current) => [...current, localUserMessage]);
             setAttachments([]);
             setLiveTurn({
               status: "waiting",
@@ -448,13 +451,13 @@ export function SessionConsoleContainer(props: {
                 })
               );
 
-              setUserMessages((current) => current.map((message) => (
-                message.id === messageId
+              setConversationItems((current) => current.map((item) => (
+                item.kind === "message" && item.id === messageId
                   ? {
-                      ...message,
+                      ...item,
                       attachments: preparedAttachments
                     }
-                  : message
+                  : item
               )));
 
               if (isDraft) {
@@ -500,7 +503,7 @@ export function SessionConsoleContainer(props: {
                 } : current;
                 const finalized = finalizeLiveTurn(failed);
                 if (finalized) {
-                  setAssistantMessages((messages) => [...messages, finalized]);
+                  setConversationItems((messages) => [...messages, finalized]);
                 }
                 return null;
               });
