@@ -5,7 +5,7 @@ import { messages } from "./i18n";
 describe("authErrorMessage", () => {
   it("explains when an email is already registered", () => {
     expect(authErrorMessage(new Error("email_already_registered"), "register", messages.zh)).toBe(
-      "邮箱已注册，请直接登录。"
+      "该邮箱已经注册，请直接登录。"
     );
   });
 });

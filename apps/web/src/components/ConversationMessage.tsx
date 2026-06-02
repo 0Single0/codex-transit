@@ -1,14 +1,19 @@
 import type { ConversationItem } from "../conversationItems";
+import type { WebMessages } from "../i18n";
 import { AttachmentPreview } from "./AttachmentPreview";
+import { MessageRichText } from "./MessageRichText";
 import { ToolCallCard } from "./ToolCallCard";
 
-export function ConversationMessage(props: { item: ConversationItem }) {
+export function ConversationMessage(props: {
+  item: ConversationItem;
+  labels: WebMessages;
+}) {
   const { item } = props;
 
   if (item.kind === "tool") {
     return (
       <div className="w-full px-1">
-        <ToolCallCard toolCall={item.toolCall} />
+        <ToolCallCard labels={props.labels} toolCall={item.toolCall} />
       </div>
     );
   }
@@ -25,16 +30,10 @@ export function ConversationMessage(props: { item: ConversationItem }) {
           ))}
         </div>
       ) : null}
-      <div className={`mt-3 ${user ? "flex justify-end" : "flex justify-start"}`}>
-        <pre
-          className={`max-w-full whitespace-pre-wrap break-words rounded-[20px] px-4 py-3 font-sans text-[15px] leading-7 ${
-            user
-              ? "bg-white/[0.08] text-white shadow-[0_12px_30px_rgba(0,0,0,0.18)]"
-              : "bg-transparent px-0 py-0 text-slate-100"
-          }`}
-        >
-          {item.text}
-        </pre>
+      <div className={`mt-3 flex ${user ? "justify-end" : "justify-start"}`}>
+        <div className="max-w-full whitespace-pre-wrap break-words font-sans text-[15px] leading-7">
+          <MessageRichText text={item.text} tone={user ? "user" : "codex"} />
+        </div>
       </div>
     </article>
   );
