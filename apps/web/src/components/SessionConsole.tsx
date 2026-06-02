@@ -1,9 +1,11 @@
-﻿import type { CodexHistoryMessage, RealtimeEvent, TerminalOutputChunk } from "@codex-transit/shared";
-import { ChevronLeft, Clock3, SendHorizontal, TerminalSquare } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { CodexHistoryMessage, CodexModel, RealtimeEvent } from "@codex-transit/shared";
+import { ChevronLeft, Clock3, TerminalSquare } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
-import { buildConversationItems } from "../conversationItems";
+import type { LiveTurnState } from "../conversationItems";
 import type { WebMessages } from "../i18n";
+import { ChatComposer, type ComposerModelOption } from "./ChatComposer";
+import { LiveTurnBubble } from "./LiveTurnBubble";
 
 type UserMessage = {
   id: string;
@@ -18,22 +20,24 @@ export function SessionConsole(props: {
   projectName: string;
   projectPath: string;
   historyMessages: CodexHistoryMessage[];
+  models: CodexModel[];
+  modelsLoading: boolean;
+  selectedModel: string | null;
   onBack: () => void;
   onHistory: () => void;
-  onSend: (text: string) => Promise<void>;
+  onSelectModel: (model: string) => void;
+  onSend: (text: string, model: string | null) => Promise<void>;
 }) {
-  const [output, setOutput] = useState<TerminalOutputChunk[]>([]);
   const [prompt, setPrompt] = useState("");
-  const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
-  const [isWaitingResponse, setIsWaitingResponse] = useState(false);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
+  const [liveTurn, setLiveTurn] = useState<LiveTurnState | null>(null);
   const userMessageSeq = useRef(0);
   const submitLock = useRef(false);
   const lastSubmit = useRef<{ text: string; at: number } | null>(null);
   const timeoutHandle = useRef<number | null>(null);
-  const conversation = useMemo(() => buildConversationItems([], output), [output]);
+
   const historyConversation = props.historyMessages.map((message) => ({
     id: message.id,
     role: message.role === "user" ? "user" as const : "codex" as const,
@@ -41,15 +45,20 @@ export function SessionConsole(props: {
   }));
   const visibleConversation = [
     ...historyConversation,
-    ...userMessages,
-    ...conversation
+    ...userMessages
   ];
+  const modelOptions: ComposerModelOption[] = props.models.map((model) => ({
+    id: model.id,
+    label: model.label,
+    available: model.available
+  }));
 
   useEffect(() => {
-    setOutput([]);
     setUserMessages([]);
+    setLiveTurn(null);
+    setPrompt("");
+    setIsSending(false);
     userMessageSeq.current = 0;
-    setIsWaitingResponse(false);
     if (timeoutHandle.current) {
       window.clearTimeout(timeoutHandle.current);
       timeoutHandle.current = null;
@@ -69,7 +78,14 @@ export function SessionConsole(props: {
             window.clearTimeout(timeoutHandle.current);
             timeoutHandle.current = null;
           }
-          setOutput((current) => [...current, event]);
+          setLiveTurn((current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              status: "streaming",
+              text: `${current.text}${event.text}`
+            };
+          });
           return;
         }
         if (event.type === "codex.turn.completed") {
@@ -77,7 +93,8 @@ export function SessionConsole(props: {
             window.clearTimeout(timeoutHandle.current);
             timeoutHandle.current = null;
           }
-          setIsWaitingResponse(false);
+          setIsSending(false);
+          setLiveTurn((current) => current ? { ...current, status: "completed" } : current);
           return;
         }
         if (event.type === "codex.turn.failed") {
@@ -85,11 +102,17 @@ export function SessionConsole(props: {
             window.clearTimeout(timeoutHandle.current);
             timeoutHandle.current = null;
           }
-          setIsWaitingResponse(false);
-          setSendError(event.message);
+          setIsSending(false);
+          setLiveTurn((current) => current ? {
+            ...current,
+            status: "failed",
+            errorMessage: event.message,
+            text: event.message
+          } : current);
         }
       }
     });
+
     return () => {
       if (timeoutHandle.current) {
         window.clearTimeout(timeoutHandle.current);
@@ -126,11 +149,6 @@ export function SessionConsole(props: {
       </header>
 
       <div className="mt-4 min-h-0 space-y-4 overflow-y-auto pb-4 pr-1">
-        {isWaitingResponse ? (
-          <div className="rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
-            正在等待 Codex 输出...
-          </div>
-        ) : null}
         {visibleConversation.length ? (
           visibleConversation.map((item) => (
             <article
@@ -155,72 +173,68 @@ export function SessionConsole(props: {
             </div>
           </section>
         )}
+        {liveTurn && liveTurn.status !== "completed" ? <LiveTurnBubble liveTurn={liveTurn} /> : null}
       </div>
 
-      <form
-        className="rounded-[26px] border border-white/10 bg-[#101822]/95 p-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)]"
+      <ChatComposer
+        labels={props.labels}
+        prompt={prompt}
+        disabled={isSending || !isRealtimeConnected}
+        sending={isSending}
+        models={modelOptions}
+        modelsLoading={props.modelsLoading}
+        selectedModel={props.selectedModel}
+        onPromptChange={setPrompt}
+        onModelChange={props.onSelectModel}
         onSubmit={async (event) => {
           event.preventDefault();
           const text = prompt.trim();
-          if (!text || isSending || isWaitingResponse || submitLock.current) return;
+          if (!text || isSending || submitLock.current) return;
           const now = Date.now();
           if (lastSubmit.current && lastSubmit.current.text === text && now - lastSubmit.current.at < 1200) {
             return;
           }
           submitLock.current = true;
           lastSubmit.current = { text, at: now };
-          setSendError(null);
-          setIsSending(true);
           setPrompt("");
+          setIsSending(true);
           const messageId = `local-user-${props.sessionId}-${userMessageSeq.current++}`;
-          setUserMessages((current) => [
-            ...current,
-            { id: messageId, role: "user", text }
-          ]);
+          setUserMessages((current) => [...current, { id: messageId, role: "user", text }]);
+          setLiveTurn({
+            status: "waiting",
+            text: "",
+            errorMessage: null,
+            turnKey: `${props.sessionId}-${Date.now()}`
+          });
+
           try {
-            await props.onSend(text);
-            setIsWaitingResponse(true);
+            await props.onSend(text, props.selectedModel);
             if (timeoutHandle.current) {
               window.clearTimeout(timeoutHandle.current);
             }
             timeoutHandle.current = window.setTimeout(() => {
-              setSendError("消息已发送，暂未收到 Codex 输出，仍在等待中。");
+              setLiveTurn((current) => current ? {
+                ...current,
+                status: "waiting",
+                text: "消息已发送，暂未收到 Codex 输出，仍在等待中。"
+              } : current);
             }, 45000);
           } catch (caught) {
             const message = caught instanceof Error && caught.message.includes("agent_offline")
               ? props.labels.agentOffline
               : props.labels.sendFailed;
-            setSendError(message);
-            setIsWaitingResponse(false);
-            if (timeoutHandle.current) {
-              window.clearTimeout(timeoutHandle.current);
-              timeoutHandle.current = null;
-            }
-          } finally {
             setIsSending(false);
+            setLiveTurn((current) => current ? {
+              ...current,
+              status: "failed",
+              errorMessage: message,
+              text: message
+            } : current);
+          } finally {
             submitLock.current = false;
           }
         }}
-      >
-        <div className="flex items-end gap-3">
-          <textarea
-            className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-2 py-3 text-sm leading-6 text-white outline-none placeholder:text-slate-600"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={props.labels.promptPlaceholder}
-            rows={1}
-          />
-          <button
-            aria-label={props.labels.send}
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-violet-600 text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!prompt.trim() || isSending || isWaitingResponse}
-            type="submit"
-          >
-            <SendHorizontal className="h-5 w-5" />
-          </button>
-        </div>
-        {sendError ? <p className="px-2 pb-1 text-sm text-red-300">{sendError}</p> : null}
-      </form>
+      />
     </section>
   );
 }

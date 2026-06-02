@@ -10,11 +10,28 @@ fn parses_camel_case_session_input_from_server() {
       "deviceId":"00000000-0000-4000-8000-000000000003",
       "projectId":"00000000-0000-4000-8000-000000000004",
       "sessionId":"00000000-0000-4000-8000-000000000005",
-      "text":"hello"
+      "text":"hello",
+      "model":"gpt-5.3-codex"
     }"#;
 
     let event: RealtimeEvent = serde_json::from_str(raw).unwrap();
-    assert!(matches!(event, RealtimeEvent::SessionInput { text, .. } if text == "hello"));
+    assert!(matches!(event, RealtimeEvent::SessionInput { text, model, .. } if text == "hello" && model == Some("gpt-5.3-codex".to_string())));
+}
+
+#[test]
+fn parses_device_models_updated_event() {
+    let raw = r#"{
+      "type":"device.models.updated",
+      "eventId":"00000000-0000-4000-8000-000000000001",
+      "timestamp":"2026-06-02T00:00:00.000Z",
+      "userId":"00000000-0000-4000-8000-000000000002",
+      "deviceId":"00000000-0000-4000-8000-000000000003",
+      "models":[{"id":"gpt-5.3-codex","label":"gpt-5.3-codex","provider":"custom","available":true}],
+      "defaultModel":"gpt-5.3-codex"
+    }"#;
+
+    let event: RealtimeEvent = serde_json::from_str(raw).unwrap();
+    assert!(matches!(event, RealtimeEvent::DeviceModelsUpdated { default_model, models, .. } if default_model == Some("gpt-5.3-codex".to_string()) && models.len() == 1));
 }
 
 #[test]

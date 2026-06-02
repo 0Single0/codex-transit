@@ -52,7 +52,8 @@ export function buildStartAndInputEvents(
     eventId: cryptoRandomId,
     now: () => new Date().toISOString()
   },
-  codexSessionId?: string
+  codexSessionId?: string,
+  model?: string
 ) {
   const base = buildSessionRealtimeBase(session);
   const inputEvent = {
@@ -61,6 +62,7 @@ export function buildStartAndInputEvents(
     timestamp: clock.now(),
     ...base,
     ...(codexSessionId ? { codexSessionId } : {}),
+    ...(model ? { model } : {}),
     text
   };
   if (codexSessionId) {

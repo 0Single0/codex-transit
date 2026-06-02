@@ -124,9 +124,13 @@ impl CodexAdapter {
         session_id: Uuid,
         working_dir: PathBuf,
         prompt: String,
+        model: Option<String>,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
-        let mut exec = self.build_exec_command(working_dir.clone(), CodexExecOptions::default());
+        let mut exec = self.build_exec_command(working_dir.clone(), CodexExecOptions {
+            sandbox: None,
+            model,
+        });
         exec.args.push(prompt);
         self.spawn_command(session_id, working_dir, exec, output_tx)
             .await
@@ -138,12 +142,16 @@ impl CodexAdapter {
         working_dir: PathBuf,
         codex_session_id: String,
         prompt: String,
+        model: Option<String>,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
         let mut exec = self.build_resume_command(
             working_dir.clone(),
             &codex_session_id,
-            CodexExecOptions::default(),
+            CodexExecOptions {
+                sandbox: None,
+                model,
+            },
         );
         exec.args.push(prompt);
         self.spawn_command(session_id, working_dir, exec, output_tx)

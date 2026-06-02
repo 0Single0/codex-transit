@@ -122,7 +122,8 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const params = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const body = z.object({
       text: z.string().min(1),
-      codexSessionId: z.string().min(1).optional()
+      codexSessionId: z.string().min(1).optional(),
+      model: z.string().min(1).optional()
     }).parse(request.body);
     const session = await app.prisma.session.findFirst({
       where: { id: params.sessionId, userId: user.id },
@@ -130,7 +131,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     });
     if (!session) return reply.code(404).send({ error: "session_not_found" });
 
-    for (const event of buildStartAndInputEvents(session, body.text, undefined, body.codexSessionId)) {
+    for (const event of buildStartAndInputEvents(session, body.text, undefined, body.codexSessionId, body.model)) {
       const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
       if (!delivered) return reply.code(409).send({ error: "agent_offline" });
     }

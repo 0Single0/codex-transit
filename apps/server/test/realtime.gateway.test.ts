@@ -31,4 +31,26 @@ describe("ConnectionRegistry", () => {
     expect(first).toHaveBeenCalledWith(JSON.stringify({ type: "codex.history.result" }));
     expect(second).toHaveBeenCalledWith(JSON.stringify({ type: "codex.history.result" }));
   });
+
+  it("routes device model updates to every viewer connected to a device", () => {
+    const registry = new ConnectionRegistry();
+    const first = vi.fn();
+    const second = vi.fn();
+    const payload = {
+      type: "device.models.updated",
+      eventId: "00000000-0000-4000-8000-000000000001",
+      timestamp: "2026-06-02T00:00:00.000Z",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "device-1",
+      models: [{ id: "gpt-5.3-codex", label: "gpt-5.3-codex", provider: "custom", available: true }]
+    };
+    registry.addDeviceViewer("device-1", { send: first as (message: string) => void });
+    registry.addDeviceViewer("device-1", { send: second as (message: string) => void });
+
+    const count = registry.broadcastToDeviceViewers("device-1", payload);
+
+    expect(count).toBe(2);
+    expect(first).toHaveBeenCalledWith(JSON.stringify(payload));
+    expect(second).toHaveBeenCalledWith(JSON.stringify(payload));
+  });
 });

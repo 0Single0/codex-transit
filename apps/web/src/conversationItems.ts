@@ -6,9 +6,17 @@ export type ConversationItem = {
   text: string;
 };
 
+export type LiveTurnState = {
+  status: "idle" | "waiting" | "streaming" | "failed" | "completed";
+  text: string;
+  errorMessage: string | null;
+  turnKey: string;
+};
+
 export function buildConversationItems(
   messages: SessionMessage[],
-  output: TerminalOutputChunk[]
+  output: TerminalOutputChunk[],
+  liveTurn?: LiveTurnState | null
 ): ConversationItem[] {
   const items = messages.map((message, index) => ({
     id: message.id ?? `message-${index}`,
@@ -23,6 +31,14 @@ export function buildConversationItems(
       id: `codex-output-${chunk.seq}`,
       role: "codex",
       text
+    });
+  }
+
+  if (liveTurn && liveTurn.status !== "idle") {
+    items.push({
+      id: `live-turn-${liveTurn.turnKey}`,
+      role: "codex",
+      text: liveTurn.errorMessage ?? liveTurn.text
     });
   }
 

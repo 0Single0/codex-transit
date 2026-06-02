@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codexHistoryDetailResultSchema, codexHistoryRequestSchema, codexHistoryResultSchema, codexOutputChunkSchema, codexTurnCompletedSchema, codexTurnFailedSchema, fileChangedSchema, realtimeEventSchema } from "./events";
+import { codexHistoryDetailResultSchema, codexHistoryRequestSchema, codexHistoryResultSchema, codexOutputChunkSchema, codexTurnCompletedSchema, codexTurnFailedSchema, deviceModelsUpdatedSchema, fileChangedSchema, realtimeEventSchema } from "./events";
 
 const base = {
   eventId: "00000000-0000-4000-8000-000000000001",
@@ -42,6 +42,43 @@ describe("realtime event schemas", () => {
     });
 
     expect(parsed.message).toBe("service unavailable");
+  });
+
+  it("parses device model update events and session input model fields", () => {
+    const event = deviceModelsUpdatedSchema.parse({
+      eventId: "00000000-0000-4000-8000-000000000001",
+      timestamp: "2026-06-02T00:00:00.000Z",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      type: "device.models.updated",
+      models: [
+        {
+          id: "gpt-5.3-codex",
+          label: "gpt-5.3-codex",
+          provider: "custom",
+          available: true
+        }
+      ],
+      defaultModel: "gpt-5.3-codex"
+    });
+
+    const input = realtimeEventSchema.parse({
+      eventId: "00000000-0000-4000-8000-000000000004",
+      timestamp: "2026-06-02T00:00:00.000Z",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      projectId: "00000000-0000-4000-8000-000000000005",
+      sessionId: "00000000-0000-4000-8000-000000000006",
+      type: "session.input",
+      text: "hello",
+      model: "gpt-5.3-codex"
+    });
+
+    expect(event.type).toBe("device.models.updated");
+    expect(input.type).toBe("session.input");
+    if (input.type === "session.input") {
+      expect(input.model).toBe("gpt-5.3-codex");
+    }
   });
 
   it("rejects empty file paths from file change events", () => {

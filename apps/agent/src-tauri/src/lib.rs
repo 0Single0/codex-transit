@@ -10,6 +10,7 @@ pub mod path_guard;
 pub mod project_registry;
 pub mod project_sync;
 pub mod protocol;
+pub mod provider_models;
 pub mod server_client;
 pub mod session_manager;
 

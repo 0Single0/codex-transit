@@ -17,4 +17,21 @@ describe("buildConversationItems", () => {
       { id: "codex-output-1", role: "codex", text: "Done" }
     ]);
   });
+
+  it("keeps one live assistant bubble through waiting and streaming", () => {
+    expect(
+      buildConversationItems(
+        [],
+        [],
+        {
+          status: "streaming",
+          text: "partial answer",
+          errorMessage: null,
+          turnKey: "turn-1"
+        }
+      )
+    ).toEqual([
+      { id: "live-turn-turn-1", role: "codex", text: "partial answer" }
+    ]);
+  });
 });

@@ -91,6 +91,23 @@ describe("ApiClient", () => {
     });
   });
 
+  it("sends session input with a selected model", async () => {
+    const http = createHttpMock({ ok: true });
+    const api = new ApiClient("token", http);
+
+    await api.sendSessionInput("session-1", "continue", "codex-session-1", "gpt-5.3-codex");
+
+    expect(http.request).toHaveBeenCalledWith({
+      url: "/sessions/session-1/input",
+      method: "POST",
+      data: { text: "continue", codexSessionId: "codex-session-1", model: "gpt-5.3-codex" },
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer token"
+      }
+    });
+  });
+
   it("claims Agent login QR pairings for the signed in user", async () => {
     const http = createHttpMock({ deviceId: "device-1" });
     const api = new ApiClient("token", http);

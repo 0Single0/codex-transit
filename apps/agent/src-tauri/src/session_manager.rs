@@ -28,6 +28,7 @@ pub trait SessionProcessRunner {
         session_id: Uuid,
         working_dir: PathBuf,
         prompt: String,
+        model: Option<String>,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> impl std::future::Future<Output = Result<Self::Process>> + Send;
 
@@ -37,6 +38,7 @@ pub trait SessionProcessRunner {
         working_dir: PathBuf,
         codex_session_id: String,
         prompt: String,
+        model: Option<String>,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> impl std::future::Future<Output = Result<Self::Process>> + Send;
 }
@@ -122,10 +124,12 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             RealtimeEvent::SessionInput {
                 session_id,
                 codex_session_id,
+                model,
                 text,
                 ..
-            } => self.send_input_with_codex_session(session_id, codex_session_id, text).await,
+            } => self.send_input_with_codex_session(session_id, codex_session_id, model, text).await,
             RealtimeEvent::SessionStop { session_id, .. } => self.stop_session(session_id).await,
+            RealtimeEvent::DeviceModelsUpdated { .. } => Ok(()),
             RealtimeEvent::CodexHistoryRequest {
                 request_id,
                 user_id,
@@ -205,13 +209,14 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
     }
 
     pub async fn send_input(&mut self, session_id: Uuid, text: String) -> Result<()> {
-        self.send_input_with_codex_session(session_id, None, text).await
+        self.send_input_with_codex_session(session_id, None, None, text).await
     }
 
     pub async fn send_input_with_codex_session(
         &mut self,
         session_id: Uuid,
         codex_session_id: Option<String>,
+        model: Option<String>,
         text: String,
     ) -> Result<()> {
         let Some(context) = self.contexts.get(&session_id).cloned() else {
@@ -223,11 +228,11 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let resume_id = codex_session_id.or(context.codex_session_id);
         let process_result = if let Some(resume_id) = resume_id {
             self.runner
-                .resume_session(session_id, project_root, resume_id, text, self.output_tx.clone())
+                .resume_session(session_id, project_root, resume_id, text, model, self.output_tx.clone())
                 .await
         } else {
             self.runner
-                .start_session(session_id, project_root, text, self.output_tx.clone())
+                .start_session(session_id, project_root, text, model, self.output_tx.clone())
                 .await
         };
         let process = match process_result {
@@ -534,9 +539,10 @@ impl SessionProcessRunner for CodexAdapter {
         session_id: Uuid,
         working_dir: PathBuf,
         prompt: String,
+        model: Option<String>,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
-        self.start(session_id, working_dir, prompt, output_tx).await
+        self.start(session_id, working_dir, prompt, model, output_tx).await
     }
 
     async fn resume_session(
@@ -545,9 +551,10 @@ impl SessionProcessRunner for CodexAdapter {
         working_dir: PathBuf,
         codex_session_id: String,
         prompt: String,
+        model: Option<String>,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
-        self.resume(session_id, working_dir, codex_session_id, prompt, output_tx)
+        self.resume(session_id, working_dir, codex_session_id, prompt, model, output_tx)
             .await
     }
 }

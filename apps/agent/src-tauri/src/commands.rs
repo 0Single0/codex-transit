@@ -11,6 +11,7 @@ use crate::{
     agent_runtime::run_agent_loop,
     agent_config::{AgentConfig, AgentSettings},
     file_watcher::FileWatcher,
+    provider_models::fetch_provider_models,
     project_registry::{ProjectEntry, ProjectRegistry},
     project_sync::{
         build_device_bind_request, sync_projects_from_registry, DeviceBindHttpClient,
@@ -290,6 +291,7 @@ fn spawn_agent_runtime_task(
     }
 
     let server_client = ServerClient::new(realtime.url.to_string());
+    let device_id = realtime.device_id.parse().ok();
     let task = tokio::spawn(async move {
         let connection = tokio::spawn(async move {
             if let Err(error) = server_client
@@ -299,6 +301,20 @@ fn spawn_agent_runtime_task(
                 eprintln!("agent realtime connection stopped: {error}");
             }
         });
+
+        if let Some(device_id) = device_id {
+            let snapshot = fetch_provider_models().await;
+            let event = crate::protocol::RealtimeEvent::DeviceModelsUpdated {
+                event_id: uuid::Uuid::new_v4(),
+                timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                user_id: uuid::Uuid::nil(),
+                device_id,
+                models: snapshot.models,
+                default_model: snapshot.default_model,
+                error: snapshot.error,
+            };
+            let _ = server_outbound_tx.send(event).await;
+        }
 
         let result = run_agent_loop(
             &mut manager,

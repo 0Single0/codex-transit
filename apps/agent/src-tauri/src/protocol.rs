@@ -2,8 +2,31 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexModel {
+    pub id: String,
+    pub label: String,
+    pub provider: String,
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owned_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RealtimeEvent {
+    #[serde(rename = "device.models.updated", rename_all = "camelCase")]
+    DeviceModelsUpdated {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        models: Vec<CodexModel>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        default_model: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>
+    },
     #[serde(rename = "session.start", rename_all = "camelCase")]
     SessionStart {
         event_id: Uuid,
@@ -25,6 +48,8 @@ pub enum RealtimeEvent {
         session_id: Uuid,
         #[serde(skip_serializing_if = "Option::is_none")]
         codex_session_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
         text: String
     },
     #[serde(rename = "session.stop", rename_all = "camelCase")]

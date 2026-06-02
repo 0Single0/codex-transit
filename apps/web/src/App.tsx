@@ -1,4 +1,4 @@
-import type { CodexHistoryItem, CodexHistoryMessage, DeviceSummary, ProjectSummary, RealtimeEvent, SessionSummary } from "@codex-transit/shared";
+import type { CodexHistoryItem, CodexHistoryMessage, CodexModel, DeviceSummary, ProjectSummary, RealtimeEvent, SessionSummary } from "@codex-transit/shared";
 import { Bell, ChevronLeft, Languages, Menu, MonitorSmartphone, Settings, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ApiClient, ApiError } from "./api/client";
@@ -13,6 +13,13 @@ import { openSessionNavigation } from "./sessionNavigation";
 
 type Tab = "devices" | "me";
 
+type DeviceModelState = {
+  models: CodexModel[];
+  defaultModel: string | null;
+  loading: boolean;
+  error: string | null;
+};
+
 export function App() {
   const [locale, setLocale] = useState<Locale>((localStorage.getItem("locale") as Locale | null) ?? "zh");
   const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
@@ -26,6 +33,8 @@ export function App() {
   const [activeCodexSessionId, setActiveCodexSessionId] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [deviceModelsById, setDeviceModelsById] = useState<Record<string, DeviceModelState>>({});
+  const [selectedModelBySession, setSelectedModelBySession] = useState<Record<string, string | null>>({});
   const [activeTab, setActiveTab] = useState<Tab>("devices");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -51,6 +60,8 @@ export function App() {
     setActiveCodexSessionId(null);
     setHistoryLoading(false);
     setSelectedSessionId(null);
+    setDeviceModelsById({});
+    setSelectedModelBySession({});
     setActiveTab("devices");
     setHistoryOpen(false);
     setMessage(null);
@@ -75,6 +86,29 @@ export function App() {
       setDevices(await api.devices());
     });
   }, [api, token]);
+
+  useEffect(() => {
+    if (!token || !selectedDevice) return;
+    const stream = connectDeviceStream({
+      token,
+      deviceId: selectedDevice.id,
+      onEvent(event: RealtimeEvent) {
+        if (event.type !== "device.models.updated") return;
+        setDeviceModelsById((current) => ({
+          ...current,
+          [selectedDevice.id]: {
+            models: event.models,
+            defaultModel: event.defaultModel ?? null,
+            loading: false,
+            error: event.error ?? null
+          }
+        }));
+      }
+    });
+    return () => {
+      stream.close();
+    };
+  }, [selectedDevice, token]);
 
   async function login(email: string, password: string) {
     const result = await api.login(email, password);
@@ -105,6 +139,15 @@ export function App() {
     setCodexHistoryMessages([]);
     setActiveCodexSessionId(null);
     setHistoryLoading(false);
+    setDeviceModelsById((current) => ({
+      ...current,
+      [device.id]: current[device.id] ?? {
+        models: [],
+        defaultModel: null,
+        loading: true,
+        error: null
+      }
+    }));
     const response = await runAuthorized(() => api.deviceProjects(device.id));
     if (!response) return;
     setProjects(response.projects);
@@ -232,6 +275,8 @@ export function App() {
     setActiveCodexSessionId(null);
     setHistoryLoading(false);
     setSelectedSessionId(null);
+    setDeviceModelsById({});
+    setSelectedModelBySession({});
     setHistoryOpen(false);
     setActiveTab("devices");
     setMessage(null);
@@ -283,8 +328,17 @@ export function App() {
             }}
             onHistory={openCodexHistory}
             historyMessages={codexHistoryMessages}
-            onSend={async (text) => {
-              await runAuthorized(() => api.sendSessionInput(selectedSessionId, text, activeCodexSessionId ?? undefined));
+            models={selectedDevice ? (deviceModelsById[selectedDevice.id]?.models ?? []) : []}
+            modelsLoading={selectedDevice ? (deviceModelsById[selectedDevice.id]?.loading ?? true) : true}
+            selectedModel={selectedModelBySession[selectedSessionId] ?? (selectedDevice ? deviceModelsById[selectedDevice.id]?.defaultModel ?? null : null)}
+            onSelectModel={(model) => {
+              setSelectedModelBySession((current) => ({
+                ...current,
+                [selectedSessionId]: model
+              }));
+            }}
+            onSend={async (text, model) => {
+              await runAuthorized(() => api.sendSessionInput(selectedSessionId, text, activeCodexSessionId ?? undefined, model ?? undefined));
             }}
           />
         ) : null}

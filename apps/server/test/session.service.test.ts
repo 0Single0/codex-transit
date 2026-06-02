@@ -91,6 +91,34 @@ describe("session service", () => {
     ]);
   });
 
+  it("builds session input events with an optional model", () => {
+    const session = {
+      id: "00000000-0000-4000-8000-000000000001",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      projectId: "00000000-0000-4000-8000-000000000004",
+      project: {
+        agentKey: "00000000-0000-4000-8000-000000000099"
+      }
+    };
+
+    const events = buildStartAndInputEvents(
+      session,
+      "hello",
+      {
+        eventId: () => "00000000-0000-4000-8000-000000000010",
+        now: () => "2026-06-02T00:00:00.000Z"
+      },
+      undefined,
+      "gpt-5.3-codex"
+    );
+
+    expect(events[1]).toMatchObject({
+      type: "session.input",
+      model: "gpt-5.3-codex"
+    });
+  });
+
   it("builds a device-level codex history request event", () => {
     const event = buildCodexHistoryRequestEvent({
       userId: "00000000-0000-4000-8000-000000000002",

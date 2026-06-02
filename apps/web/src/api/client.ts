@@ -96,10 +96,19 @@ export class ApiClient {
     });
   }
 
-  async sendSessionInput(sessionId: string, text: string, codexSessionId?: string): Promise<{ ok: boolean }> {
+  async sendSessionInput(
+    sessionId: string,
+    text: string,
+    codexSessionId?: string,
+    model?: string
+  ): Promise<{ ok: boolean }> {
     return this.request(`/sessions/${sessionId}/input`, {
       method: "POST",
-      data: { text, ...(codexSessionId ? { codexSessionId } : {}) }
+      data: {
+        text,
+        ...(codexSessionId ? { codexSessionId } : {}),
+        ...(model ? { model } : {})
+      }
     });
   }
 

@@ -37,13 +37,29 @@ export const projectsSyncSchema = baseEventSchema.extend({
   projects: z.array(projectSummarySchema)
 });
 
+export const codexModelSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  provider: z.string().min(1),
+  available: z.boolean(),
+  ownedBy: z.string().min(1).optional()
+});
+
+export const deviceModelsUpdatedSchema = baseEventSchema.extend({
+  type: z.literal("device.models.updated"),
+  models: z.array(codexModelSchema),
+  defaultModel: z.string().min(1).optional(),
+  error: z.string().min(1).optional()
+});
+
 export const sessionStartSchema = sessionBaseSchema.extend({
   type: z.literal("session.start")
 });
 
 export const sessionInputSchema = sessionBaseSchema.extend({
   type: z.literal("session.input"),
-  text: z.string().min(1)
+  text: z.string().min(1),
+  model: z.string().min(1).optional()
 });
 
 export const sessionStopSchema = sessionBaseSchema.extend({
@@ -150,6 +166,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
   agentOnlineSchema,
   agentOfflineSchema,
   projectsSyncSchema,
+  deviceModelsUpdatedSchema,
   sessionStartSchema,
   sessionInputSchema,
   sessionStopSchema,
@@ -173,5 +190,6 @@ export type CodexTurnCompleted = z.infer<typeof codexTurnCompletedSchema>;
 export type CodexTurnFailed = z.infer<typeof codexTurnFailedSchema>;
 export type FileChangedEvent = z.infer<typeof fileChangedSchema>;
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
+export type CodexModel = z.infer<typeof codexModelSchema>;
 export type CodexHistoryItem = z.infer<typeof codexHistoryItemSchema>;
 export type CodexHistoryMessage = z.infer<typeof codexHistoryMessageSchema>;
