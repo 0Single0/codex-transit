@@ -43,7 +43,7 @@ export function ChatComposer(props: {
             onChange={(event) => props.onModelChange(event.target.value)}
           >
             <option value="" disabled>
-              {props.modelsLoading ? "模型加载中..." : "选择模型"}
+              {props.modelsLoading ? props.labels.modelLoading : props.labels.selectModel}
             </option>
             {props.models.map((model) => (
               <option key={model.id} value={model.id} disabled={!model.available}>

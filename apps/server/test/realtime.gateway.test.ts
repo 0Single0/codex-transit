@@ -53,4 +53,27 @@ describe("ConnectionRegistry", () => {
     expect(first).toHaveBeenCalledWith(JSON.stringify(payload));
     expect(second).toHaveBeenCalledWith(JSON.stringify(payload));
   });
+
+  it("replays only the cached device model update to late device viewers", () => {
+    const registry = new ConnectionRegistry();
+    const earlyViewer = vi.fn();
+    const lateViewer = vi.fn();
+    const modelsPayload = {
+      type: "device.models.updated",
+      eventId: "00000000-0000-4000-8000-000000000011",
+      timestamp: "2026-06-02T00:00:00.000Z",
+      userId: "00000000-0000-4000-8000-000000000012",
+      deviceId: "device-1",
+      models: [{ id: "gpt-5.4", label: "gpt-5.4", provider: "custom", available: true }]
+    };
+
+    registry.addDeviceViewer("device-1", { send: earlyViewer as (message: string) => void });
+    registry.cacheLatestDeviceModels("device-1", modelsPayload);
+    registry.broadcastToDeviceViewers("device-1", { type: "codex.history.result" });
+
+    registry.addDeviceViewer("device-1", { send: lateViewer as (message: string) => void });
+
+    expect(lateViewer).toHaveBeenCalledTimes(1);
+    expect(lateViewer).toHaveBeenCalledWith(JSON.stringify(modelsPayload));
+  });
 });

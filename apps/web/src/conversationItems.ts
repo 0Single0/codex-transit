@@ -6,6 +6,12 @@ export type ConversationItem = {
   text: string;
 };
 
+export type LocalAssistantMessage = {
+  id: string;
+  role: "codex";
+  text: string;
+};
+
 export type LiveTurnState = {
   status: "idle" | "waiting" | "streaming" | "failed" | "completed";
   text: string;
@@ -43,4 +49,16 @@ export function buildConversationItems(
   }
 
   return items;
+}
+
+export function finalizeLiveTurn(liveTurn: LiveTurnState | null): LocalAssistantMessage | null {
+  if (!liveTurn) return null;
+  const text = (liveTurn.errorMessage ?? liveTurn.text).trim();
+  if (!text) return null;
+
+  return {
+    id: `live-turn-${liveTurn.turnKey}`,
+    role: "codex",
+    text
+  };
 }

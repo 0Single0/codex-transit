@@ -64,6 +64,9 @@ export async function registerRealtimeGateway(app: FastifyInstance) {
       if ("sessionId" in event) {
         connectionRegistry.broadcastToSession(event.sessionId, event);
       }
+      if (event.type === "device.models.updated") {
+        connectionRegistry.cacheLatestDeviceModels(event.deviceId, event);
+      }
       if (
         event.type === "codex.history.result" ||
         event.type === "codex.history.detail.result" ||

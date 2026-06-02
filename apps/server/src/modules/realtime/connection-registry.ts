@@ -4,7 +4,7 @@ export class ConnectionRegistry {
   private readonly agents = new Map<string, Sender>();
   private readonly viewersBySession = new Map<string, Set<Sender>>();
   private readonly viewersByDevice = new Map<string, Set<Sender>>();
-  private readonly latestDevicePayload = new Map<string, unknown>();
+  private readonly latestDeviceModelsPayload = new Map<string, unknown>();
 
   addAgent(deviceId: string, sender: Sender) {
     this.agents.set(deviceId, sender);
@@ -31,7 +31,7 @@ export class ConnectionRegistry {
     const viewers = this.viewersByDevice.get(deviceId) ?? new Set<Sender>();
     viewers.add(sender);
     this.viewersByDevice.set(deviceId, viewers);
-    const latestPayload = this.latestDevicePayload.get(deviceId);
+    const latestPayload = this.latestDeviceModelsPayload.get(deviceId);
     if (latestPayload) {
       sender.send(JSON.stringify(latestPayload));
     }
@@ -60,11 +60,14 @@ export class ConnectionRegistry {
   }
 
   broadcastToDeviceViewers(deviceId: string, payload: unknown) {
-    this.latestDevicePayload.set(deviceId, payload);
     const viewers = this.viewersByDevice.get(deviceId);
     if (!viewers) return 0;
     const message = JSON.stringify(payload);
     for (const viewer of viewers) viewer.send(message);
     return viewers.size;
+  }
+
+  cacheLatestDeviceModels(deviceId: string, payload: unknown) {
+    this.latestDeviceModelsPayload.set(deviceId, payload);
   }
 }

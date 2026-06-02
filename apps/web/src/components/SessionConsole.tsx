@@ -2,7 +2,7 @@ import type { CodexHistoryMessage, CodexModel, RealtimeEvent } from "@codex-tran
 import { ChevronLeft, Clock3, TerminalSquare } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
-import type { LiveTurnState } from "../conversationItems";
+import { finalizeLiveTurn, type LiveTurnState, type LocalAssistantMessage } from "../conversationItems";
 import type { WebMessages } from "../i18n";
 import { ChatComposer, type ComposerModelOption } from "./ChatComposer";
 import { LiveTurnBubble } from "./LiveTurnBubble";
@@ -32,6 +32,7 @@ export function SessionConsole(props: {
   const [isSending, setIsSending] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
+  const [assistantMessages, setAssistantMessages] = useState<LocalAssistantMessage[]>([]);
   const [liveTurn, setLiveTurn] = useState<LiveTurnState | null>(null);
   const userMessageSeq = useRef(0);
   const submitLock = useRef(false);
@@ -45,7 +46,8 @@ export function SessionConsole(props: {
   }));
   const visibleConversation = [
     ...historyConversation,
-    ...userMessages
+    ...userMessages,
+    ...assistantMessages
   ];
   const modelOptions: ComposerModelOption[] = props.models.map((model) => ({
     id: model.id,
@@ -55,6 +57,7 @@ export function SessionConsole(props: {
 
   useEffect(() => {
     setUserMessages([]);
+    setAssistantMessages([]);
     setLiveTurn(null);
     setPrompt("");
     setIsSending(false);
@@ -88,27 +91,43 @@ export function SessionConsole(props: {
           });
           return;
         }
+
         if (event.type === "codex.turn.completed") {
           if (timeoutHandle.current) {
             window.clearTimeout(timeoutHandle.current);
             timeoutHandle.current = null;
           }
           setIsSending(false);
-          setLiveTurn((current) => current ? { ...current, status: "completed" } : current);
+          setLiveTurn((current) => {
+            const completed = current ? { ...current, status: "completed" as const } : current;
+            const finalized = finalizeLiveTurn(completed);
+            if (finalized) {
+              setAssistantMessages((messages) => [...messages, finalized]);
+            }
+            return null;
+          });
           return;
         }
+
         if (event.type === "codex.turn.failed") {
           if (timeoutHandle.current) {
             window.clearTimeout(timeoutHandle.current);
             timeoutHandle.current = null;
           }
           setIsSending(false);
-          setLiveTurn((current) => current ? {
-            ...current,
-            status: "failed",
-            errorMessage: event.message,
-            text: event.message
-          } : current);
+          setLiveTurn((current) => {
+            const failed = current ? {
+              ...current,
+              status: "failed" as const,
+              errorMessage: event.message,
+              text: event.message
+            } : current;
+            const finalized = finalizeLiveTurn(failed);
+            if (finalized) {
+              setAssistantMessages((messages) => [...messages, finalized]);
+            }
+            return null;
+          });
         }
       }
     });
@@ -136,7 +155,7 @@ export function SessionConsole(props: {
           <h1 className="truncate text-base font-semibold">{props.projectName}</h1>
           <p className="mt-0.5 truncate text-[11px] text-slate-500">{props.projectPath}</p>
           <p className={`mt-1 text-[11px] ${isRealtimeConnected ? "text-emerald-300" : "text-amber-300"}`}>
-            {isRealtimeConnected ? "实时通道已连接" : "实时通道未连接"}
+            {isRealtimeConnected ? props.labels.realtimeConnected : props.labels.realtimeDisconnected}
           </p>
         </div>
         <button
@@ -173,7 +192,7 @@ export function SessionConsole(props: {
             </div>
           </section>
         )}
-        {liveTurn && liveTurn.status !== "completed" ? <LiveTurnBubble liveTurn={liveTurn} /> : null}
+        {liveTurn ? <LiveTurnBubble liveTurn={liveTurn} labels={props.labels} /> : null}
       </div>
 
       <ChatComposer
@@ -194,6 +213,7 @@ export function SessionConsole(props: {
           if (lastSubmit.current && lastSubmit.current.text === text && now - lastSubmit.current.at < 1200) {
             return;
           }
+
           submitLock.current = true;
           lastSubmit.current = { text, at: now };
           setPrompt("");
@@ -216,7 +236,7 @@ export function SessionConsole(props: {
               setLiveTurn((current) => current ? {
                 ...current,
                 status: "waiting",
-                text: "消息已发送，暂未收到 Codex 输出，仍在等待中。"
+                text: props.labels.waitingForOutput
               } : current);
             }, 45000);
           } catch (caught) {
@@ -224,12 +244,19 @@ export function SessionConsole(props: {
               ? props.labels.agentOffline
               : props.labels.sendFailed;
             setIsSending(false);
-            setLiveTurn((current) => current ? {
-              ...current,
-              status: "failed",
-              errorMessage: message,
-              text: message
-            } : current);
+            setLiveTurn((current) => {
+              const failed = current ? {
+                ...current,
+                status: "failed" as const,
+                errorMessage: message,
+                text: message
+              } : current;
+              const finalized = finalizeLiveTurn(failed);
+              if (finalized) {
+                setAssistantMessages((messages) => [...messages, finalized]);
+              }
+              return null;
+            });
           } finally {
             submitLock.current = false;
           }
