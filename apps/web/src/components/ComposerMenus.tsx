@@ -1,8 +1,10 @@
 import { Check, ChevronRight, Paperclip, ShieldAlert, Sparkles, Target } from "lucide-react";
+import type { WebMessages } from "../i18n";
 
 export type ApprovalPolicy = "default" | "auto" | "full";
 
 export function ComposerPlusMenu(props: {
+  labels: WebMessages;
   open: boolean;
   planMode: boolean;
   onTogglePlanMode: () => void;
@@ -19,7 +21,7 @@ export function ComposerPlusMenu(props: {
         type="button"
       >
         <Paperclip className="h-4 w-4" />
-        添加照片和文件
+        {props.labels.addAttachment}
       </button>
       <button
         className="mt-1 flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
@@ -28,7 +30,7 @@ export function ComposerPlusMenu(props: {
       >
         <span className="flex items-center gap-3">
           <Sparkles className="h-4 w-4" />
-          计划模式
+          {props.labels.planMode}
         </span>
         <Toggle checked={props.planMode} />
       </button>
@@ -49,7 +51,7 @@ export function ComposerPlusMenu(props: {
       >
         <span className="flex items-center gap-3">
           <ShieldAlert className="h-4 w-4" />
-          权限设置
+          {props.labels.permissionSettings}
         </span>
         <ChevronRight className="h-4 w-4 text-slate-500" />
       </button>
@@ -58,6 +60,7 @@ export function ComposerPlusMenu(props: {
 }
 
 export function ComposerApprovalMenu(props: {
+  labels: WebMessages;
   open: boolean;
   value: ApprovalPolicy;
   onSelect: (value: ApprovalPolicy) => void;
@@ -65,9 +68,9 @@ export function ComposerApprovalMenu(props: {
   if (!props.open) return null;
 
   const options: Array<{ value: ApprovalPolicy; label: string }> = [
-    { value: "default", label: "默认权限" },
-    { value: "auto", label: "自动审查" },
-    { value: "full", label: "完全访问权限" }
+    { value: "default", label: props.labels.approvalDefault },
+    { value: "auto", label: props.labels.approvalAuto },
+    { value: "full", label: props.labels.approvalFull }
   ];
 
   return (

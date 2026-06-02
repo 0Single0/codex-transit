@@ -107,10 +107,25 @@ export function App() {
         }));
       }
     });
+    void stream.ready.then(async () => {
+      try {
+        await runAuthorized(() => api.refreshDeviceModels(selectedDevice.id));
+      } catch (caught) {
+        setDeviceModelsById((current) => ({
+          ...current,
+          [selectedDevice.id]: {
+            models: current[selectedDevice.id]?.models ?? [],
+            defaultModel: current[selectedDevice.id]?.defaultModel ?? null,
+            loading: false,
+            error: caught instanceof Error ? caught.message : labels.modelLoadFailed
+          }
+        }));
+      }
+    });
     return () => {
       stream.close();
     };
-  }, [selectedDevice, token]);
+  }, [api, labels.modelLoadFailed, selectedDevice, token]);
 
   async function login(email: string, password: string) {
     const result = await api.login(email, password);
@@ -331,7 +346,8 @@ export function App() {
             onHistory={openCodexHistory}
             historyMessages={codexHistoryMessages}
             models={selectedDevice ? (deviceModelsById[selectedDevice.id]?.models ?? []) : []}
-            modelsLoading={selectedDevice ? (deviceModelsById[selectedDevice.id]?.loading ?? true) : true}
+            modelsLoading={selectedDevice ? (deviceModelsById[selectedDevice.id]?.loading ?? false) : false}
+            modelError={selectedDevice ? deviceModelsById[selectedDevice.id]?.error ?? null : null}
             selectedModel={selectedModelBySession[selectedSessionId] ?? (selectedDevice ? deviceModelsById[selectedDevice.id]?.defaultModel ?? null : null)}
             onSelectModel={(model) => {
               setSelectedModelBySession((current) => ({

@@ -1,4 +1,4 @@
-import { ChevronDown, LoaderCircle, Plus, SendHorizontal } from "lucide-react";
+import { ChevronDown, LoaderCircle, Plus, SendHorizontal, ShieldAlert } from "lucide-react";
 import { type FormEvent } from "react";
 import type { AttachmentItem } from "../conversationItems";
 import type { WebMessages } from "../i18n";
@@ -11,6 +11,12 @@ export type ComposerModelOption = {
   available: boolean;
 };
 
+function approvalLabel(labels: WebMessages, value: ApprovalPolicy) {
+  if (value === "full") return labels.approvalFull;
+  if (value === "auto") return labels.approvalAuto;
+  return labels.approvalDefault;
+}
+
 export function ChatComposer(props: {
   labels: WebMessages;
   prompt: string;
@@ -18,6 +24,7 @@ export function ChatComposer(props: {
   sending: boolean;
   models: ComposerModelOption[];
   modelsLoading: boolean;
+  modelError: string | null;
   selectedModel: string | null;
   attachments: AttachmentItem[];
   planMode: boolean;
@@ -34,9 +41,11 @@ export function ChatComposer(props: {
   onPickFiles: () => void;
   onSelectApprovalPolicy: (value: ApprovalPolicy) => void;
 }) {
+  const currentApprovalLabel = approvalLabel(props.labels, props.approvalPolicy);
+
   return (
     <form
-      className="relative grid gap-3 rounded-[28px] bg-[#141414] p-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)]"
+      className="relative grid gap-3 rounded-[30px] bg-[#141414] px-3 pb-3 pt-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)]"
       onSubmit={props.onSubmit}
     >
       {props.attachments.length ? (
@@ -57,42 +66,57 @@ export function ChatComposer(props: {
         />
       </div>
 
-      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
-        <div className="relative">
+      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="relative">
+            <button
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/[0.06] text-slate-200"
+              onClick={props.onTogglePlusMenu}
+              type="button"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+            <ComposerPlusMenu
+              labels={props.labels}
+              open={props.plusMenuOpen}
+              planMode={props.planMode}
+              onTogglePlanMode={props.onTogglePlanMode}
+              onPickFiles={props.onPickFiles}
+              onOpenApprovalMenu={props.onOpenApprovalMenu}
+            />
+            <ComposerApprovalMenu
+              labels={props.labels}
+              open={props.approvalMenuOpen}
+              value={props.approvalPolicy}
+              onSelect={(value) => {
+                props.onSelectApprovalPolicy(value);
+                props.onCloseMenus();
+              }}
+            />
+          </div>
+
           <button
-            className="grid h-10 w-10 place-items-center rounded-full bg-white/[0.06] text-slate-200"
-            onClick={props.onTogglePlusMenu}
+            className="inline-flex h-10 items-center gap-2 rounded-full bg-[#f08c49]/12 px-3 text-xs font-medium text-[#f6a66f]"
+            onClick={props.onOpenApprovalMenu}
             type="button"
           >
-            <Plus className="h-5 w-5" />
+            <ShieldAlert className="h-4 w-4" />
+            <span className="truncate">{currentApprovalLabel}</span>
           </button>
-          <ComposerPlusMenu
-            open={props.plusMenuOpen}
-            planMode={props.planMode}
-            onTogglePlanMode={props.onTogglePlanMode}
-            onPickFiles={props.onPickFiles}
-            onOpenApprovalMenu={props.onOpenApprovalMenu}
-          />
-          <ComposerApprovalMenu
-            open={props.approvalMenuOpen}
-            value={props.approvalPolicy}
-            onSelect={(value) => {
-              props.onSelectApprovalPolicy(value);
-              props.onCloseMenus();
-            }}
-          />
-        </div>
 
-        <div className="flex min-w-0 items-center gap-2 text-sm text-slate-400">
-          <label className="flex min-w-0 items-center gap-2 rounded-full bg-white/[0.05] px-3 py-2">
+          <label className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full bg-white/[0.05] px-3 py-2 text-sm text-slate-300">
             <select
-              className="min-w-0 bg-transparent text-sm text-slate-200 outline-none"
+              className="min-w-0 max-w-[180px] bg-transparent text-sm text-slate-200 outline-none"
               disabled={props.modelsLoading || props.disabled}
               value={props.selectedModel ?? ""}
               onChange={(event) => props.onModelChange(event.target.value)}
             >
               <option value="" disabled>
-                {props.modelsLoading ? props.labels.modelLoading : props.labels.selectModel}
+                {props.modelsLoading
+                  ? props.labels.modelLoading
+                  : props.modelError
+                    ? props.labels.modelLoadFailed
+                    : props.labels.selectModel}
               </option>
               {props.models.map((model) => (
                 <option key={model.id} value={model.id} disabled={!model.available}>
@@ -102,9 +126,6 @@ export function ChatComposer(props: {
             </select>
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
           </label>
-          <span className="truncate text-xs text-[#f08c49]">
-            {props.approvalPolicy === "full" ? "完全访问权限" : props.approvalPolicy === "auto" ? "自动审查" : "默认权限"}
-          </span>
         </div>
 
         <button

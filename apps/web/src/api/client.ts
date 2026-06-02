@@ -69,6 +69,12 @@ export class ApiClient {
     return this.request(`/devices/${deviceId}/projects`);
   }
 
+  async refreshDeviceModels(deviceId: string): Promise<{ ok: boolean }> {
+    return this.request(`/devices/${deviceId}/models/refresh`, {
+      method: "POST"
+    });
+  }
+
   async createSession(deviceId: string, projectId: string, title: string): Promise<SessionSummary> {
     return this.request("/sessions", {
       method: "POST",

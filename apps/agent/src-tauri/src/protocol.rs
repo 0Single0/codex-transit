@@ -25,6 +25,13 @@ pub struct SessionAttachment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RealtimeEvent {
+    #[serde(rename = "device.models.request", rename_all = "camelCase")]
+    DeviceModelsRequest {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+    },
     #[serde(rename = "device.models.updated", rename_all = "camelCase")]
     DeviceModelsUpdated {
         event_id: Uuid,

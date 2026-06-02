@@ -12,6 +12,7 @@ use crate::{
         CODEX_TURN_FAILED_PREFIX,
     },
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
+    provider_models::fetch_provider_models,
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
     file_watcher::FileChange,
     protocol::{RealtimeEvent, SessionAttachment},
@@ -152,6 +153,11 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                 .await
             }
             RealtimeEvent::SessionStop { session_id, .. } => self.stop_session(session_id).await,
+            RealtimeEvent::DeviceModelsRequest {
+                user_id,
+                device_id,
+                ..
+            } => self.handle_device_models_request(user_id, device_id).await,
             RealtimeEvent::DeviceModelsUpdated { .. } => Ok(()),
             RealtimeEvent::CodexHistoryRequest {
                 request_id,
@@ -551,6 +557,22 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             },
         };
         self.outbound_tx.send(event).await?;
+        Ok(())
+    }
+
+    async fn handle_device_models_request(&mut self, user_id: Uuid, device_id: Uuid) -> Result<()> {
+        let snapshot = fetch_provider_models().await;
+        self.outbound_tx
+            .send(RealtimeEvent::DeviceModelsUpdated {
+                event_id: Uuid::new_v4(),
+                timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                user_id,
+                device_id,
+                models: snapshot.models,
+                default_model: snapshot.default_model,
+                error: snapshot.error,
+            })
+            .await?;
         Ok(())
     }
 

@@ -1,6 +1,8 @@
+import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../../plugins/auth";
+import { connectionRegistry } from "../realtime/realtime.gateway";
 import {
   bindCodeExpiry,
   buildAgentLoginPayload,
@@ -21,6 +23,26 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
       select: { id: true, name: true, platform: true, online: true, lastSeenAt: true },
       orderBy: { updatedAt: "desc" }
     });
+  });
+
+  app.post("/devices/:deviceId/models/refresh", async (request, reply) => {
+    const user = await requireUser(request);
+    const params = z.object({ deviceId: z.string().uuid() }).parse(request.params);
+    const device = await app.prisma.device.findFirst({
+      where: { id: params.deviceId, userId: user.id }
+    });
+    if (!device) return reply.code(404).send({ error: "device_not_found" });
+
+    const delivered = connectionRegistry.sendToAgent(device.id, {
+      type: "device.models.request",
+      eventId: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      userId: user.id,
+      deviceId: device.id
+    });
+    if (!delivered) return reply.code(409).send({ error: "agent_offline" });
+
+    return { ok: true };
   });
 
   app.post("/devices/bind-codes", async (request) => {

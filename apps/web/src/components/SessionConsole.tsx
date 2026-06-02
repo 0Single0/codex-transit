@@ -28,6 +28,7 @@ export function SessionConsole(props: {
   historyMessages: CodexHistoryMessage[];
   models: CodexModel[];
   modelsLoading: boolean;
+  modelError: string | null;
   selectedModel: string | null;
   onBack: () => void;
   onHistory: () => void;
@@ -265,6 +266,7 @@ export function SessionConsole(props: {
         sending={isSending}
         models={modelOptions}
         modelsLoading={props.modelsLoading}
+        modelError={props.modelError}
         selectedModel={props.selectedModel}
         attachments={attachments}
         planMode={planMode}

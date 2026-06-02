@@ -52,6 +52,10 @@ export const deviceModelsUpdatedSchema = baseEventSchema.extend({
   error: z.string().min(1).optional()
 });
 
+export const deviceModelsRequestSchema = baseEventSchema.extend({
+  type: z.literal("device.models.request")
+});
+
 export const sessionStartSchema = sessionBaseSchema.extend({
   type: z.literal("session.start")
 });
@@ -183,6 +187,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
   agentOnlineSchema,
   agentOfflineSchema,
   projectsSyncSchema,
+  deviceModelsRequestSchema,
   deviceModelsUpdatedSchema,
   sessionStartSchema,
   sessionInputSchema,
