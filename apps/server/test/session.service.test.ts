@@ -119,6 +119,40 @@ describe("session service", () => {
     });
   });
 
+  it("builds session input events with plan mode, approval policy, and attachments", () => {
+    const session = {
+      id: "00000000-0000-4000-8000-000000000001",
+      userId: "00000000-0000-4000-8000-000000000002",
+      deviceId: "00000000-0000-4000-8000-000000000003",
+      projectId: "00000000-0000-4000-8000-000000000004",
+      project: {
+        agentKey: "00000000-0000-4000-8000-000000000099"
+      }
+    };
+
+    const events = buildStartAndInputEvents(
+      session,
+      "请看图",
+      {
+        eventId: () => "00000000-0000-4000-8000-000000000010",
+        now: () => "2026-06-02T00:00:00.000Z"
+      },
+      undefined,
+      "gpt-5.4",
+      true,
+      "full",
+      [{ name: "ui.png", path: "C:/tmp/ui.png", kind: "image" }]
+    );
+
+    expect(events[1]).toMatchObject({
+      type: "session.input",
+      model: "gpt-5.4",
+      planMode: true,
+      approvalPolicy: "full",
+      attachments: [{ name: "ui.png", path: "C:/tmp/ui.png", kind: "image" }]
+    });
+  });
+
   it("builds a device-level codex history request event", () => {
     const event = buildCodexHistoryRequestEvent({
       userId: "00000000-0000-4000-8000-000000000002",

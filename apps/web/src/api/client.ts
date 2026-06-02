@@ -100,14 +100,27 @@ export class ApiClient {
     sessionId: string,
     text: string,
     codexSessionId?: string,
-    model?: string
+    model?: string,
+    options?: {
+      planMode?: boolean;
+      approvalPolicy?: "default" | "auto" | "full";
+      attachments?: Array<{
+        name: string;
+        path: string;
+        mimeType?: string;
+        kind: "image" | "file";
+      }>;
+    }
   ): Promise<{ ok: boolean }> {
     return this.request(`/sessions/${sessionId}/input`, {
       method: "POST",
       data: {
         text,
         ...(codexSessionId ? { codexSessionId } : {}),
-        ...(model ? { model } : {})
+        ...(model ? { model } : {}),
+        ...(options?.planMode ? { planMode: true } : {}),
+        ...(options?.approvalPolicy ? { approvalPolicy: options.approvalPolicy } : {}),
+        ...(options?.attachments?.length ? { attachments: options.attachments } : {})
       }
     });
   }

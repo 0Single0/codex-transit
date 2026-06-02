@@ -123,7 +123,15 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     const body = z.object({
       text: z.string().min(1),
       codexSessionId: z.string().min(1).optional(),
-      model: z.string().min(1).optional()
+      model: z.string().min(1).optional(),
+      planMode: z.boolean().optional(),
+      approvalPolicy: z.enum(["default", "auto", "full"]).optional(),
+      attachments: z.array(z.object({
+        name: z.string().min(1),
+        path: z.string().min(1),
+        mimeType: z.string().min(1).optional(),
+        kind: z.enum(["image", "file"])
+      })).optional()
     }).parse(request.body);
     const session = await app.prisma.session.findFirst({
       where: { id: params.sessionId, userId: user.id },
@@ -131,7 +139,21 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     });
     if (!session) return reply.code(404).send({ error: "session_not_found" });
 
-    for (const event of buildStartAndInputEvents(session, body.text, undefined, body.codexSessionId, body.model)) {
+    for (const event of buildStartAndInputEvents(
+      session,
+      body.text,
+      undefined,
+      body.codexSessionId,
+      body.model,
+      body.planMode,
+      body.approvalPolicy,
+      body.attachments?.map((attachment) => ({
+        name: attachment.name,
+        path: attachment.path,
+        ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+        kind: attachment.kind
+      }))
+    )) {
       const delivered = connectionRegistry.sendToAgent(session.deviceId, event);
       if (!delivered) return reply.code(409).send({ error: "agent_offline" });
     }

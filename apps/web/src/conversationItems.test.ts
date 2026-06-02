@@ -1,42 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { buildConversationItems, finalizeLiveTurn } from "./conversationItems";
+import { finalizeLiveTurn, historyMessagesToConversation, outputChunksToConversation } from "./conversationItems";
 
-describe("buildConversationItems", () => {
-  it("keeps each codex output chunk as an independent bubble", () => {
+describe("conversation items", () => {
+  it("maps history messages to conversation items", () => {
     expect(
-      buildConversationItems(
-        [{ id: "m1", role: "user", text: "帮我加登录" }],
-        [
-          { seq: 0, stream: "stdout", text: "Thinking..." },
-          { seq: 1, stream: "stdout", text: "Done" }
-        ]
-      )
+      historyMessagesToConversation([
+        { id: "m1", role: "user", text: "帮我加登录" },
+        { id: "m2", role: "assistant", text: "好的" }
+      ])
     ).toEqual([
-      { id: "m1", role: "user", text: "帮我加登录" },
-      { id: "codex-output-0", role: "codex", text: "Thinking..." },
-      { id: "codex-output-1", role: "codex", text: "Done" }
+      { id: "m1", kind: "message", role: "user", text: "帮我加登录" },
+      { id: "m2", kind: "message", role: "codex", text: "好的" }
     ]);
   });
 
-  it("keeps one live assistant bubble through waiting and streaming", () => {
+  it("maps output chunks to codex conversation items", () => {
     expect(
-      buildConversationItems(
-        [],
-        [],
-        {
-          status: "streaming",
-          text: "partial answer",
-          errorMessage: null,
-          turnKey: "turn-1"
-        }
-      )
+      outputChunksToConversation([
+        { seq: 0, stream: "stdout", text: "Thinking..." },
+        { seq: 1, stream: "stdout", text: "Done" }
+      ])
     ).toEqual([
-      { id: "live-turn-turn-1", role: "codex", text: "partial answer" }
+      { id: "codex-output-0", kind: "message", role: "codex", text: "Thinking..." },
+      { id: "codex-output-1", kind: "message", role: "codex", text: "Done" }
     ]);
   });
-});
 
-describe("finalizeLiveTurn", () => {
   it("persists the completed assistant response as a normal codex bubble", () => {
     expect(
       finalizeLiveTurn({
@@ -47,6 +36,7 @@ describe("finalizeLiveTurn", () => {
       })
     ).toEqual({
       id: "live-turn-turn-2",
+      kind: "message",
       role: "codex",
       text: "最终回复"
     });
@@ -62,6 +52,7 @@ describe("finalizeLiveTurn", () => {
       })
     ).toEqual({
       id: "live-turn-turn-3",
+      kind: "message",
       role: "codex",
       text: "发送失败"
     });

@@ -1,17 +1,23 @@
 import type { CodexHistoryMessage, CodexModel, RealtimeEvent } from "@codex-transit/shared";
 import { ChevronLeft, Clock3, TerminalSquare } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { connectSessionStream } from "../api/realtime";
-import { finalizeLiveTurn, type LiveTurnState, type LocalAssistantMessage } from "../conversationItems";
+import {
+  finalizeLiveTurn,
+  historyMessagesToConversation,
+  type AttachmentItem,
+  type ConversationItem,
+  type LiveTurnState,
+  type LocalAssistantMessage,
+  type ToolCallItem
+} from "../conversationItems";
 import type { WebMessages } from "../i18n";
 import { ChatComposer, type ComposerModelOption } from "./ChatComposer";
+import { ConversationMessage } from "./ConversationMessage";
 import { LiveTurnBubble } from "./LiveTurnBubble";
+import type { ApprovalPolicy } from "./ComposerMenus";
 
-type UserMessage = {
-  id: string;
-  role: "user";
-  text: string;
-};
+type UserMessage = Extract<ConversationItem, { kind: "message"; role: "user" }>;
 
 export function SessionConsole(props: {
   labels: WebMessages;
@@ -26,28 +32,43 @@ export function SessionConsole(props: {
   onBack: () => void;
   onHistory: () => void;
   onSelectModel: (model: string) => void;
-  onSend: (text: string, model: string | null) => Promise<void>;
+  onSend: (
+    text: string,
+    model: string | null,
+    options: {
+      planMode: boolean;
+      approvalPolicy: ApprovalPolicy;
+      attachments: AttachmentItem[];
+    }
+  ) => Promise<void>;
 }) {
   const [prompt, setPrompt] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [userMessages, setUserMessages] = useState<UserMessage[]>([]);
   const [assistantMessages, setAssistantMessages] = useState<LocalAssistantMessage[]>([]);
+  const [toolCalls, setToolCalls] = useState<ToolCallItem[]>([]);
   const [liveTurn, setLiveTurn] = useState<LiveTurnState | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [planMode, setPlanMode] = useState(false);
+  const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>("full");
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
   const userMessageSeq = useRef(0);
   const submitLock = useRef(false);
   const lastSubmit = useRef<{ text: string; at: number } | null>(null);
   const timeoutHandle = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const historyConversation = props.historyMessages.map((message) => ({
-    id: message.id,
-    role: message.role === "user" ? "user" as const : "codex" as const,
-    text: message.text
-  }));
-  const visibleConversation = [
+  const historyConversation = useMemo(
+    () => historyMessagesToConversation(props.historyMessages),
+    [props.historyMessages]
+  );
+  const visibleConversation: ConversationItem[] = [
     ...historyConversation,
     ...userMessages,
-    ...assistantMessages
+    ...assistantMessages,
+    ...toolCalls.map((toolCall) => ({ id: toolCall.id, kind: "tool" as const, toolCall }))
   ];
   const modelOptions: ComposerModelOption[] = props.models.map((model) => ({
     id: model.id,
@@ -58,15 +79,29 @@ export function SessionConsole(props: {
   useEffect(() => {
     setUserMessages([]);
     setAssistantMessages([]);
+    setToolCalls([]);
     setLiveTurn(null);
+    setAttachments([]);
     setPrompt("");
     setIsSending(false);
+    setPlusMenuOpen(false);
+    setApprovalMenuOpen(false);
     userMessageSeq.current = 0;
     if (timeoutHandle.current) {
       window.clearTimeout(timeoutHandle.current);
       timeoutHandle.current = null;
     }
   }, [props.sessionId]);
+
+  useEffect(() => {
+    return () => {
+      for (const attachment of attachments) {
+        if (attachment.previewUrl) {
+          URL.revokeObjectURL(attachment.previewUrl);
+        }
+      }
+    };
+  }, [attachments]);
 
   useEffect(() => {
     const stream = connectSessionStream({
@@ -88,6 +123,21 @@ export function SessionConsole(props: {
               status: "streaming",
               text: `${current.text}${event.text}`
             };
+          });
+          return;
+        }
+
+        if (event.type === "codex.tool.call") {
+          setToolCalls((current) => {
+            const next = current.filter((item) => item.id !== event.itemId);
+            next.push({
+              id: event.itemId,
+              command: event.command,
+              status: event.status,
+              ...(event.output ? { output: event.output } : {}),
+              ...(typeof event.exitCode === "number" ? { exitCode: event.exitCode } : {})
+            });
+            return next;
           });
           return;
         }
@@ -143,6 +193,30 @@ export function SessionConsole(props: {
 
   return (
     <section className="grid h-[calc(100vh-32px)] grid-rows-[auto_1fr_auto] overflow-hidden px-4 pb-4 pt-4 text-white">
+      <input
+        accept="image/*,*"
+        className="hidden"
+        multiple
+        onChange={async (event) => {
+          const files = Array.from(event.target.files ?? []);
+          if (!files.length) return;
+          setAttachments((current) => [
+            ...current,
+            ...files.map((file, index) => ({
+              id: `${file.name}-${Date.now()}-${index}`,
+              name: file.name,
+              path: file.name,
+              ...(file.type ? { mimeType: file.type } : {}),
+              kind: (file.type.startsWith("image/") ? "image" : "file") as "image" | "file",
+              ...(file.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(file) } : {})
+            }))
+          ]);
+          event.currentTarget.value = "";
+        }}
+        ref={fileInputRef}
+        type="file"
+      />
+
       <header className="grid grid-cols-[44px_1fr_44px] items-center gap-3">
         <button
           className="grid h-11 w-11 place-items-center rounded-full bg-white/[0.06] text-slate-200"
@@ -167,24 +241,13 @@ export function SessionConsole(props: {
         </button>
       </header>
 
-      <div className="mt-4 min-h-0 space-y-4 overflow-y-auto pb-4 pr-1">
+      <div className="mt-6 min-h-0 space-y-6 overflow-y-auto pb-6 pr-1">
         {visibleConversation.length ? (
-          visibleConversation.map((item) => (
-            <article
-              className={`grid max-w-[88%] gap-2 rounded-[22px] px-4 py-3 ${
-                item.role === "user"
-                  ? "ml-auto bg-violet-600 text-white"
-                  : "mr-auto border border-white/10 bg-[#101822] text-slate-100"
-              }`}
-              key={item.id}
-            >
-              <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-6">{item.text}</pre>
-            </article>
-          ))
+          visibleConversation.map((item) => <ConversationMessage item={item} key={item.id} />)
         ) : (
           <section className="grid h-full min-h-[440px] place-items-center text-center">
             <div>
-              <div className="mx-auto grid h-20 w-20 place-items-center rounded-[24px] border border-violet-400/40 bg-violet-500/10 text-violet-200 shadow-violet-glow">
+              <div className="mx-auto grid h-20 w-20 place-items-center rounded-[24px] bg-white/[0.04] text-slate-200">
                 <TerminalSquare className="h-9 w-9" />
               </div>
               <h2 className="mt-5 text-xl font-semibold">{props.labels.startCodexChat}</h2>
@@ -203,8 +266,25 @@ export function SessionConsole(props: {
         models={modelOptions}
         modelsLoading={props.modelsLoading}
         selectedModel={props.selectedModel}
+        attachments={attachments}
+        planMode={planMode}
+        approvalPolicy={approvalPolicy}
+        plusMenuOpen={plusMenuOpen}
+        approvalMenuOpen={approvalMenuOpen}
         onPromptChange={setPrompt}
         onModelChange={props.onSelectModel}
+        onTogglePlusMenu={() => {
+          setPlusMenuOpen((current) => !current);
+          setApprovalMenuOpen(false);
+        }}
+        onOpenApprovalMenu={() => setApprovalMenuOpen(true)}
+        onCloseMenus={() => {
+          setPlusMenuOpen(false);
+          setApprovalMenuOpen(false);
+        }}
+        onTogglePlanMode={() => setPlanMode((current) => !current)}
+        onPickFiles={() => fileInputRef.current?.click()}
+        onSelectApprovalPolicy={setApprovalPolicy}
         onSubmit={async (event) => {
           event.preventDefault();
           const text = prompt.trim();
@@ -218,8 +298,19 @@ export function SessionConsole(props: {
           lastSubmit.current = { text, at: now };
           setPrompt("");
           setIsSending(true);
+          setPlusMenuOpen(false);
+          setApprovalMenuOpen(false);
+          const outgoingAttachments = attachments;
           const messageId = `local-user-${props.sessionId}-${userMessageSeq.current++}`;
-          setUserMessages((current) => [...current, { id: messageId, role: "user", text }]);
+          const localUserMessage: UserMessage = {
+            id: messageId,
+            kind: "message" as const,
+            role: "user",
+            text,
+            ...(outgoingAttachments.length ? { attachments: outgoingAttachments } : {})
+          };
+          setUserMessages((current) => [...current, localUserMessage]);
+          setAttachments([]);
           setLiveTurn({
             status: "waiting",
             text: "",
@@ -228,7 +319,11 @@ export function SessionConsole(props: {
           });
 
           try {
-            await props.onSend(text, props.selectedModel);
+            await props.onSend(text, props.selectedModel, {
+              planMode,
+              approvalPolicy,
+              attachments: outgoingAttachments
+            });
             if (timeoutHandle.current) {
               window.clearTimeout(timeoutHandle.current);
             }

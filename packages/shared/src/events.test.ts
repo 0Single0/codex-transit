@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codexHistoryDetailResultSchema, codexHistoryRequestSchema, codexHistoryResultSchema, codexOutputChunkSchema, codexTurnCompletedSchema, codexTurnFailedSchema, deviceModelsUpdatedSchema, fileChangedSchema, realtimeEventSchema } from "./events";
+import { codexHistoryDetailResultSchema, codexHistoryRequestSchema, codexHistoryResultSchema, codexOutputChunkSchema, codexToolCallSchema, codexTurnCompletedSchema, codexTurnFailedSchema, deviceModelsUpdatedSchema, fileChangedSchema, realtimeEventSchema } from "./events";
 
 const base = {
   eventId: "00000000-0000-4000-8000-000000000001",
@@ -71,14 +71,39 @@ describe("realtime event schemas", () => {
       sessionId: "00000000-0000-4000-8000-000000000006",
       type: "session.input",
       text: "hello",
-      model: "gpt-5.3-codex"
+      model: "gpt-5.3-codex",
+      planMode: true,
+      approvalPolicy: "full",
+      attachments: [
+        {
+          name: "design.png",
+          path: "C:/tmp/design.png",
+          kind: "image"
+        }
+      ]
     });
 
     expect(event.type).toBe("device.models.updated");
     expect(input.type).toBe("session.input");
     if (input.type === "session.input") {
       expect(input.model).toBe("gpt-5.3-codex");
+      expect(input.planMode).toBe(true);
     }
+  });
+
+  it("parses codex tool call events", () => {
+    const parsed = codexToolCallSchema.parse({
+      ...base,
+      type: "codex.tool.call",
+      itemId: "item_2",
+      command: "dir",
+      status: "completed",
+      output: "README.md",
+      exitCode: 0
+    });
+
+    expect(parsed.itemId).toBe("item_2");
+    expect(parsed.status).toBe("completed");
   });
 
   it("rejects empty file paths from file change events", () => {

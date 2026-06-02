@@ -1,18 +1,20 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{bail, Result};
+use serde_json::Value;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
     codex_adapter::{
-        format_error_chain, CodexAdapter, CodexSessionProcess, OutputStream, ProcessOutput,
-        CODEX_THREAD_ID_PREFIX, CODEX_TURN_COMPLETED_PREFIX, CODEX_TURN_FAILED_PREFIX,
+        format_error_chain, CodexAdapter, CodexExecOptions, CodexSessionProcess, OutputStream,
+        ProcessOutput, CODEX_THREAD_ID_PREFIX, CODEX_TOOL_CALL_PREFIX, CODEX_TURN_COMPLETED_PREFIX,
+        CODEX_TURN_FAILED_PREFIX,
     },
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
     diff_provider::{GitDiffProvider, ProjectDiffProvider},
     file_watcher::FileChange,
-    protocol::RealtimeEvent,
+    protocol::{RealtimeEvent, SessionAttachment},
 };
 
 pub trait ManagedSessionProcess {
@@ -28,7 +30,7 @@ pub trait SessionProcessRunner {
         session_id: Uuid,
         working_dir: PathBuf,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> impl std::future::Future<Output = Result<Self::Process>> + Send;
 
@@ -38,7 +40,7 @@ pub trait SessionProcessRunner {
         working_dir: PathBuf,
         codex_session_id: String,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> impl std::future::Future<Output = Result<Self::Process>> + Send;
 }
@@ -112,22 +114,43 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             } => {
                 self.start_session_with_context(
                     session_id,
-                SessionContext {
-                    user_id,
-                    device_id,
-                    project_id,
-                    codex_session_id: None,
-                },
-            )
-            .await
+                    SessionContext {
+                        user_id,
+                        device_id,
+                        project_id,
+                        codex_session_id: None,
+                    },
+                )
+                .await
             }
             RealtimeEvent::SessionInput {
                 session_id,
                 codex_session_id,
                 model,
+                plan_mode,
+                approval_policy,
+                attachments,
                 text,
                 ..
-            } => self.send_input_with_codex_session(session_id, codex_session_id, model, text).await,
+            } => {
+                self.send_input_with_codex_session(
+                    session_id,
+                    codex_session_id,
+                    text,
+                    CodexExecOptions {
+                        sandbox: None,
+                        model,
+                        approval_policy,
+                        plan_mode: plan_mode.unwrap_or(false),
+                        attachments: attachments
+                            .unwrap_or_default()
+                            .into_iter()
+                            .filter_map(|attachment| (attachment.kind == "image").then_some(attachment.path))
+                            .collect(),
+                    },
+                )
+                .await
+            }
             RealtimeEvent::SessionStop { session_id, .. } => self.stop_session(session_id).await,
             RealtimeEvent::DeviceModelsUpdated { .. } => Ok(()),
             RealtimeEvent::CodexHistoryRequest {
@@ -166,6 +189,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                     .await
             }
             RealtimeEvent::CodexOutputChunk { .. }
+            | RealtimeEvent::CodexToolCall { .. }
             | RealtimeEvent::CodexTurnCompleted { .. }
             | RealtimeEvent::CodexTurnFailed { .. }
             | RealtimeEvent::CodexHistoryResult { .. }
@@ -209,15 +233,16 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
     }
 
     pub async fn send_input(&mut self, session_id: Uuid, text: String) -> Result<()> {
-        self.send_input_with_codex_session(session_id, None, None, text).await
+        self.send_input_with_codex_session(session_id, None, text, CodexExecOptions::default())
+            .await
     }
 
     pub async fn send_input_with_codex_session(
         &mut self,
         session_id: Uuid,
         codex_session_id: Option<String>,
-        model: Option<String>,
         text: String,
+        options: CodexExecOptions,
     ) -> Result<()> {
         let Some(context) = self.contexts.get(&session_id).cloned() else {
             bail!("session is not running");
@@ -228,11 +253,11 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         let resume_id = codex_session_id.or(context.codex_session_id);
         let process_result = if let Some(resume_id) = resume_id {
             self.runner
-                .resume_session(session_id, project_root, resume_id, text, model, self.output_tx.clone())
+                .resume_session(session_id, project_root, resume_id, text, options, self.output_tx.clone())
                 .await
         } else {
             self.runner
-                .start_session(session_id, project_root, text, model, self.output_tx.clone())
+                .start_session(session_id, project_root, text, options, self.output_tx.clone())
                 .await
         };
         let process = match process_result {
@@ -327,6 +352,31 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                     codex_session_id: context.codex_session_id.clone(),
                     message,
                     turn_id: if turn_id.is_empty() { None } else { Some(turn_id) },
+                })
+                .await?;
+            return Ok(());
+        }
+        if output.stream == OutputStream::Stdout
+            && output.text.starts_with(CODEX_TOOL_CALL_PREFIX)
+        {
+            let Some(context) = self.contexts.get(&output.session_id).cloned() else {
+                bail!("session is not running");
+            };
+            let payload = output.text.trim_start_matches(CODEX_TOOL_CALL_PREFIX);
+            let value: Value = serde_json::from_str(payload)?;
+            self.outbound_tx
+                .send(RealtimeEvent::CodexToolCall {
+                    event_id: Uuid::new_v4(),
+                    timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                    user_id: context.user_id,
+                    device_id: context.device_id,
+                    project_id: context.project_id,
+                    session_id: output.session_id,
+                    item_id: value.get("itemId").and_then(Value::as_str).unwrap_or_default().to_string(),
+                    command: value.get("command").and_then(Value::as_str).unwrap_or_default().to_string(),
+                    status: value.get("status").and_then(Value::as_str).unwrap_or_default().to_string(),
+                    output: value.get("output").and_then(Value::as_str).map(ToString::to_string),
+                    exit_code: value.get("exitCode").and_then(Value::as_i64).map(|value| value as i32),
                 })
                 .await?;
             return Ok(());
@@ -539,10 +589,10 @@ impl SessionProcessRunner for CodexAdapter {
         session_id: Uuid,
         working_dir: PathBuf,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
-        self.start(session_id, working_dir, prompt, model, output_tx).await
+        self.start(session_id, working_dir, prompt, options, output_tx).await
     }
 
     async fn resume_session(
@@ -551,10 +601,10 @@ impl SessionProcessRunner for CodexAdapter {
         working_dir: PathBuf,
         codex_session_id: String,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
-        self.resume(session_id, working_dir, codex_session_id, prompt, model, output_tx)
+        self.resume(session_id, working_dir, codex_session_id, prompt, options, output_tx)
             .await
     }
 }

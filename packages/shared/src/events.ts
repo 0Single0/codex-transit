@@ -59,7 +59,15 @@ export const sessionStartSchema = sessionBaseSchema.extend({
 export const sessionInputSchema = sessionBaseSchema.extend({
   type: z.literal("session.input"),
   text: z.string().min(1),
-  model: z.string().min(1).optional()
+  model: z.string().min(1).optional(),
+  planMode: z.boolean().optional(),
+  approvalPolicy: z.enum(["default", "auto", "full"]).optional(),
+  attachments: z.array(z.object({
+    name: z.string().min(1),
+    path: z.string().min(1),
+    mimeType: z.string().min(1).optional(),
+    kind: z.enum(["image", "file"])
+  })).optional()
 });
 
 export const sessionStopSchema = sessionBaseSchema.extend({
@@ -77,6 +85,15 @@ export const codexOutputChunkSchema = sessionBaseSchema.extend({
   seq: z.number().int().nonnegative(),
   stream: z.enum(["stdout", "stderr"]),
   text: z.string()
+});
+
+export const codexToolCallSchema = sessionBaseSchema.extend({
+  type: z.literal("codex.tool.call"),
+  itemId: z.string().min(1),
+  command: z.string().min(1),
+  status: z.enum(["in_progress", "completed", "failed", "declined"]),
+  output: z.string().optional(),
+  exitCode: z.number().int().optional()
 });
 
 export const codexTurnCompletedSchema = sessionBaseSchema.extend({
@@ -172,6 +189,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
   sessionStopSchema,
   sessionStatusSchema,
   codexOutputChunkSchema,
+  codexToolCallSchema,
   codexTurnCompletedSchema,
   codexTurnFailedSchema,
   fileChangedSchema,
@@ -186,6 +204,7 @@ export const realtimeEventSchema = z.discriminatedUnion("type", [
 
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
 export type CodexOutputChunk = z.infer<typeof codexOutputChunkSchema>;
+export type CodexToolCall = z.infer<typeof codexToolCallSchema>;
 export type CodexTurnCompleted = z.infer<typeof codexTurnCompletedSchema>;
 export type CodexTurnFailed = z.infer<typeof codexTurnFailedSchema>;
 export type FileChangedEvent = z.infer<typeof fileChangedSchema>;

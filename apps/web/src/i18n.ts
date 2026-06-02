@@ -80,7 +80,11 @@ export const messages = {
     modelLoading: "模型加载中...",
     selectModel: "选择模型",
     modelThinking: "思考中...",
-    waitingForOutput: "消息已发送，暂未收到 Codex 输出，仍在等待中。"
+    waitingForOutput: "消息已发送，暂未收到 Codex 输出，仍在等待中。",
+    commandRunning: "正在执行命令",
+    commandCompleted: "命令已完成",
+    commandDeclined: "命令被拒绝",
+    commandFailed: "命令执行失败"
   },
   en: {
     appTitle: "Codex Transit",
@@ -161,7 +165,11 @@ export const messages = {
     modelLoading: "Loading models...",
     selectModel: "Select model",
     modelThinking: "Thinking...",
-    waitingForOutput: "Message sent. Codex output has not arrived yet, still waiting."
+    waitingForOutput: "Message sent. Codex output has not arrived yet, still waiting.",
+    commandRunning: "Running command",
+    commandCompleted: "Command completed",
+    commandDeclined: "Command declined",
+    commandFailed: "Command failed"
   }
 };
 

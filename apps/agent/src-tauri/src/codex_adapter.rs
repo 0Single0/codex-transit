@@ -18,6 +18,7 @@ use crate::path_utils::normalize_for_windows_process_path;
 pub const CODEX_THREAD_ID_PREFIX: &str = "__CODEX_THREAD_ID__:";
 pub const CODEX_TURN_COMPLETED_PREFIX: &str = "__CODEX_TURN_COMPLETED__:";
 pub const CODEX_TURN_FAILED_PREFIX: &str = "__CODEX_TURN_FAILED__:";
+pub const CODEX_TOOL_CALL_PREFIX: &str = "__CODEX_TOOL_CALL__:";
 
 #[derive(Debug)]
 pub struct ProcessOutput {
@@ -44,6 +45,9 @@ pub struct CodexAdapter {
 pub struct CodexExecOptions {
     pub sandbox: Option<String>,
     pub model: Option<String>,
+    pub approval_policy: Option<String>,
+    pub plan_mode: bool,
+    pub attachments: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,25 +70,12 @@ impl CodexAdapter {
     }
 
     pub fn build_exec_command(&self, working_dir: PathBuf, options: CodexExecOptions) -> CodexExecCommand {
-        let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
-        let mut args = vec![
-            "exec".to_string(),
-            "--cd".to_string(),
-            normalized_working_dir.to_string_lossy().replace('\\', "/"),
-            "--json".to_string(),
-        ];
-        if let Some(sandbox) = options.sandbox {
-            args.push("--sandbox".to_string());
-            args.push(sandbox);
-        }
-        if let Some(model) = options.model {
-            args.push("--model".to_string());
-            args.push(model);
-        }
-        CodexExecCommand {
-            program: self.command.clone(),
-            args,
-        }
+        build_codex_exec_command(
+            self.command.clone(),
+            working_dir,
+            options,
+            None,
+        )
     }
 
     pub fn build_resume_command(
@@ -93,30 +84,12 @@ impl CodexAdapter {
         codex_session_id: &str,
         options: CodexExecOptions,
     ) -> CodexExecCommand {
-        let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
-        let mut args = vec![
-            "exec".to_string(),
-            "--cd".to_string(),
-            normalized_working_dir.to_string_lossy().replace('\\', "/"),
-            "--json".to_string(),
-        ];
-        if let Some(sandbox) = options.sandbox {
-            args.push("--sandbox".to_string());
-            args.push(sandbox);
-        }
-        if let Some(model) = options.model {
-            args.push("--model".to_string());
-            args.push(model);
-        }
-        args.extend(vec![
-            "resume".to_string(),
-            "--skip-git-repo-check".to_string(),
-            codex_session_id.to_string(),
-        ]);
-        CodexExecCommand {
-            program: self.command.clone(),
-            args,
-        }
+        build_codex_exec_command(
+            self.command.clone(),
+            working_dir,
+            options,
+            Some(codex_session_id.to_string()),
+        )
     }
 
     pub async fn start(
@@ -124,13 +97,10 @@ impl CodexAdapter {
         session_id: Uuid,
         working_dir: PathBuf,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
-        let mut exec = self.build_exec_command(working_dir.clone(), CodexExecOptions {
-            sandbox: None,
-            model,
-        });
+        let mut exec = self.build_exec_command(working_dir.clone(), options);
         exec.args.push(prompt);
         self.spawn_command(session_id, working_dir, exec, output_tx)
             .await
@@ -142,17 +112,10 @@ impl CodexAdapter {
         working_dir: PathBuf,
         codex_session_id: String,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
-        let mut exec = self.build_resume_command(
-            working_dir.clone(),
-            &codex_session_id,
-            CodexExecOptions {
-                sandbox: None,
-                model,
-            },
-        );
+        let mut exec = self.build_resume_command(working_dir.clone(), &codex_session_id, options);
         exec.args.push(prompt);
         self.spawn_command(session_id, working_dir, exec, output_tx)
             .await
@@ -273,6 +236,52 @@ impl Default for CodexAdapter {
     fn default() -> Self {
         Self::new(default_codex_command())
     }
+}
+
+fn build_codex_exec_command(
+    program: String,
+    working_dir: PathBuf,
+    options: CodexExecOptions,
+    resume_session_id: Option<String>,
+) -> CodexExecCommand {
+    let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
+    let mut args = vec![
+        "exec".to_string(),
+        "--cd".to_string(),
+        normalized_working_dir.to_string_lossy().replace('\\', "/"),
+        "--json".to_string(),
+    ];
+    if let Some(sandbox) = options.sandbox {
+        args.push("--sandbox".to_string());
+        args.push(sandbox);
+    }
+    if let Some(model) = options.model {
+        args.push("--model".to_string());
+        args.push(model);
+    }
+    if let Some(approval_policy) = options.approval_policy {
+        match approval_policy.as_str() {
+            "full" => args.push("--dangerously-bypass-approvals-and-sandbox".to_string()),
+            "auto" => args.push("--full-auto".to_string()),
+            _ => {}
+        }
+    }
+    for attachment in options.attachments {
+        args.push("--image".to_string());
+        args.push(attachment);
+    }
+    if options.plan_mode {
+        args.push("-c".to_string());
+        args.push(r#"model_reasoning_effort="high""#.to_string());
+    }
+    if let Some(codex_session_id) = resume_session_id {
+        args.extend(vec![
+            "resume".to_string(),
+            "--skip-git-repo-check".to_string(),
+            codex_session_id,
+        ]);
+    }
+    CodexExecCommand { program, args }
 }
 
 pub fn default_codex_command() -> String {
@@ -513,28 +522,62 @@ async fn handle_codex_json_line(line: &str, session_id: Uuid, output_tx: &mpsc::
             .await;
         return;
     }
-    if kind != "item.completed" {
-        return;
+
+    if kind == "item.started" || kind == "item.completed" {
+        let Some(item) = value.get("item") else {
+            return;
+        };
+        let Some(item_type) = item.get("type").and_then(Value::as_str) else {
+            return;
+        };
+        if item_type == "agent_message" && kind == "item.completed" {
+            let Some(text) = item.get("text").and_then(Value::as_str) else {
+                return;
+            };
+            if text.trim().is_empty() {
+                return;
+            }
+            let _ = output_tx
+                .send(ProcessOutput {
+                    session_id,
+                    stream: OutputStream::Stdout,
+                    text: text.to_string(),
+                })
+                .await;
+            return;
+        }
+
+        if item_type == "command_execution" {
+            let item_id = item.get("id").and_then(Value::as_str).unwrap_or_default();
+            let command = item.get("command").and_then(Value::as_str).unwrap_or_default();
+            let status = item.get("status").and_then(Value::as_str).unwrap_or_default();
+            let output = item
+                .get("aggregated_output")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let exit_code = item
+                .get("exit_code")
+                .and_then(Value::as_i64)
+                .map(|value| value as i32)
+                .unwrap_or(-99999);
+
+            let payload = serde_json::json!({
+                "itemId": item_id,
+                "command": command,
+                "status": status,
+                "output": if output.is_empty() { Value::Null } else { Value::String(output.to_string()) },
+                "exitCode": if exit_code == -99999 { Value::Null } else { Value::from(exit_code) }
+            });
+
+            let _ = output_tx
+                .send(ProcessOutput {
+                    session_id,
+                    stream: OutputStream::Stdout,
+                    text: format!("{CODEX_TOOL_CALL_PREFIX}{payload}"),
+                })
+                .await;
+        }
     }
-    let Some(item) = value.get("item") else {
-        return;
-    };
-    if item.get("type").and_then(Value::as_str) != Some("agent_message") {
-        return;
-    }
-    let Some(text) = item.get("text").and_then(Value::as_str) else {
-        return;
-    };
-    if text.trim().is_empty() {
-        return;
-    }
-    let _ = output_tx
-        .send(ProcessOutput {
-            session_id,
-            stream: OutputStream::Stdout,
-            text: text.to_string(),
-        })
-        .await;
 }
 
 pub fn format_error_chain(error: &anyhow::Error) -> String {

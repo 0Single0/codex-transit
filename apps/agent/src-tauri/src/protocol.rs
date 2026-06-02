@@ -13,6 +13,16 @@ pub struct CodexModel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionAttachment {
+    pub name: String,
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RealtimeEvent {
     #[serde(rename = "device.models.updated", rename_all = "camelCase")]
@@ -50,6 +60,12 @@ pub enum RealtimeEvent {
         codex_session_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         model: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        plan_mode: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        approval_policy: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attachments: Option<Vec<SessionAttachment>>,
         text: String
     },
     #[serde(rename = "session.stop", rename_all = "camelCase")]
@@ -130,6 +146,22 @@ pub enum RealtimeEvent {
         seq: u64,
         stream: String,
         text: String
+    },
+    #[serde(rename = "codex.tool.call", rename_all = "camelCase")]
+    CodexToolCall {
+        event_id: Uuid,
+        timestamp: String,
+        user_id: Uuid,
+        device_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        item_id: String,
+        command: String,
+        status: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>
     },
     #[serde(rename = "codex.turn.completed", rename_all = "camelCase")]
     CodexTurnCompleted {

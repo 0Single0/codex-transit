@@ -53,7 +53,15 @@ export function buildStartAndInputEvents(
     now: () => new Date().toISOString()
   },
   codexSessionId?: string,
-  model?: string
+  model?: string,
+  planMode?: boolean,
+  approvalPolicy?: "default" | "auto" | "full",
+  attachments?: Array<{
+    name: string;
+    path: string;
+    mimeType?: string;
+    kind: "image" | "file";
+  }>
 ) {
   const base = buildSessionRealtimeBase(session);
   const inputEvent = {
@@ -63,6 +71,9 @@ export function buildStartAndInputEvents(
     ...base,
     ...(codexSessionId ? { codexSessionId } : {}),
     ...(model ? { model } : {}),
+    ...(planMode ? { planMode } : {}),
+    ...(approvalPolicy ? { approvalPolicy } : {}),
+    ...(attachments?.length ? { attachments } : {}),
     text
   };
   if (codexSessionId) {

@@ -11,8 +11,8 @@ export function LiveTurnBubble(props: {
   const waiting = props.liveTurn.status === "waiting";
 
   return (
-    <article className="mr-auto grid max-w-[88%] gap-2 rounded-[22px] border border-white/10 bg-[#101822] px-4 py-3 text-slate-100">
-      <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-6">
+    <article className="mr-auto max-w-[92%]">
+      <pre className="whitespace-pre-wrap break-words font-sans text-[15px] leading-7 text-slate-100">
         {text || (waiting ? props.labels.modelThinking : "")}
       </pre>
     </article>

@@ -3,10 +3,12 @@ import { Bell, ChevronLeft, Languages, Menu, MonitorSmartphone, Settings, UserRo
 import { useEffect, useMemo, useState } from "react";
 import { ApiClient, ApiError } from "./api/client";
 import { connectDeviceStream } from "./api/realtime";
+import type { AttachmentItem } from "./conversationItems";
 import { DeviceListView } from "./components/DeviceListView";
 import { LoginView } from "./components/LoginView";
 import { ProjectListView } from "./components/ProjectListView";
 import { SessionConsole } from "./components/SessionConsole";
+import type { ApprovalPolicy } from "./components/ComposerMenus";
 import { Locale, messages } from "./i18n";
 import { shouldAutoOpenStoredSession } from "./projectSessionSelection";
 import { openSessionNavigation } from "./sessionNavigation";
@@ -337,8 +339,31 @@ export function App() {
                 [selectedSessionId]: model
               }));
             }}
-            onSend={async (text, model) => {
-              await runAuthorized(() => api.sendSessionInput(selectedSessionId, text, activeCodexSessionId ?? undefined, model ?? undefined));
+            onSend={async (
+              text,
+              model,
+              options: {
+                planMode: boolean;
+                approvalPolicy: ApprovalPolicy;
+                attachments: AttachmentItem[];
+              }
+            ) => {
+              await runAuthorized(() => api.sendSessionInput(
+                selectedSessionId,
+                text,
+                activeCodexSessionId ?? undefined,
+                model ?? undefined,
+                {
+                  planMode: options.planMode,
+                  approvalPolicy: options.approvalPolicy,
+                  attachments: options.attachments.map((attachment) => ({
+                    name: attachment.name,
+                    path: attachment.path,
+                    ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+                    kind: attachment.kind
+                  }))
+                }
+              ));
             }}
           />
         ) : null}

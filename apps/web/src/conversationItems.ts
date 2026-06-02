@@ -1,16 +1,48 @@
-import type { SessionMessage, TerminalOutputChunk } from "@codex-transit/shared";
+import type { CodexHistoryMessage, SessionMessage, TerminalOutputChunk } from "@codex-transit/shared";
 
-export type ConversationItem = {
+export type AttachmentItem = {
   id: string;
-  role: "user" | "codex";
-  text: string;
+  name: string;
+  path: string;
+  mimeType?: string;
+  kind: "image" | "file";
+  previewUrl?: string;
 };
 
-export type LocalAssistantMessage = {
+export type ToolCallItem = {
   id: string;
+  command: string;
+  status: "in_progress" | "completed" | "failed" | "declined";
+  output?: string;
+  exitCode?: number;
+};
+
+export type UserConversationMessage = {
+  id: string;
+  kind: "message";
+  role: "user";
+  text: string;
+  attachments?: AttachmentItem[];
+};
+
+export type CodexConversationMessage = {
+  id: string;
+  kind: "message";
   role: "codex";
   text: string;
+  attachments?: AttachmentItem[];
 };
+
+export type ConversationItem =
+  | UserConversationMessage
+  | CodexConversationMessage
+  | {
+      id: string;
+      kind: "tool";
+      toolCall: ToolCallItem;
+    };
+
+export type LocalAssistantMessage = CodexConversationMessage;
 
 export type LiveTurnState = {
   status: "idle" | "waiting" | "streaming" | "failed" | "completed";
@@ -19,36 +51,51 @@ export type LiveTurnState = {
   turnKey: string;
 };
 
-export function buildConversationItems(
-  messages: SessionMessage[],
-  output: TerminalOutputChunk[],
-  liveTurn?: LiveTurnState | null
-): ConversationItem[] {
-  const items = messages.map((message, index) => ({
-    id: message.id ?? `message-${index}`,
-    role: message.role === "user" ? "user" as const : "codex" as const,
-    text: message.text
-  }));
+export function historyMessagesToConversation(messages: CodexHistoryMessage[]): ConversationItem[] {
+  return messages.map((message) => (
+    message.role === "user"
+      ? {
+          id: message.id,
+          kind: "message" as const,
+          role: "user" as const,
+          text: message.text
+        }
+      : {
+          id: message.id,
+          kind: "message" as const,
+          role: "codex" as const,
+          text: message.text
+        }
+  ));
+}
 
-  for (const chunk of output) {
-    const text = chunk.text.trim();
-    if (!text) continue;
-    items.push({
+export function sessionMessagesToConversation(messages: SessionMessage[]): ConversationItem[] {
+  return messages.map((message, index) => (
+    message.role === "user"
+      ? {
+          id: message.id ?? `message-${index}`,
+          kind: "message" as const,
+          role: "user" as const,
+          text: message.text
+        }
+      : {
+          id: message.id ?? `message-${index}`,
+          kind: "message" as const,
+          role: "codex" as const,
+          text: message.text
+        }
+  ));
+}
+
+export function outputChunksToConversation(output: TerminalOutputChunk[]): ConversationItem[] {
+  return output
+    .map((chunk) => ({
       id: `codex-output-${chunk.seq}`,
-      role: "codex",
-      text
-    });
-  }
-
-  if (liveTurn && liveTurn.status !== "idle") {
-    items.push({
-      id: `live-turn-${liveTurn.turnKey}`,
-      role: "codex",
-      text: liveTurn.errorMessage ?? liveTurn.text
-    });
-  }
-
-  return items;
+      kind: "message" as const,
+      role: "codex" as const,
+      text: chunk.text.trim()
+    }))
+    .filter((item) => item.text);
 }
 
 export function finalizeLiveTurn(liveTurn: LiveTurnState | null): LocalAssistantMessage | null {
@@ -58,7 +105,8 @@ export function finalizeLiveTurn(liveTurn: LiveTurnState | null): LocalAssistant
 
   return {
     id: `live-turn-${liveTurn.turnKey}`,
-    role: "codex",
+    kind: "message" as const,
+    role: "codex" as const,
     text
   };
 }
