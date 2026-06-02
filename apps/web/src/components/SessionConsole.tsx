@@ -42,6 +42,7 @@ export function SessionConsole(props: {
       attachments: AttachmentItem[];
     }
   ) => Promise<void>;
+  onUploadAttachment: (file: File) => Promise<{ path: string }>;
 }) {
   const [prompt, setPrompt] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -195,7 +196,7 @@ export function SessionConsole(props: {
   return (
     <section className="grid h-[calc(100vh-32px)] grid-rows-[auto_1fr_auto] overflow-hidden px-4 pb-4 pt-4 text-white">
       <input
-        accept="image/*,*"
+        accept="image/*"
         className="hidden"
         multiple
         onChange={async (event) => {
@@ -207,6 +208,7 @@ export function SessionConsole(props: {
               id: `${file.name}-${Date.now()}-${index}`,
               name: file.name,
               path: file.name,
+              file,
               ...(file.type ? { mimeType: file.type } : {}),
               kind: (file.type.startsWith("image/") ? "image" : "file") as "image" | "file",
               ...(file.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(file) } : {})
@@ -321,10 +323,31 @@ export function SessionConsole(props: {
           });
 
           try {
+            const preparedAttachments = await Promise.all(
+              outgoingAttachments.map(async (attachment) => {
+                if (attachment.uploadedPath || !attachment.file) {
+                  return attachment;
+                }
+                const uploaded = await props.onUploadAttachment(attachment.file);
+                return {
+                  ...attachment,
+                  uploadedPath: uploaded.path,
+                  path: uploaded.path
+                };
+              })
+            );
+            setUserMessages((current) => current.map((message) => (
+              message.id === messageId
+                ? {
+                    ...message,
+                    attachments: preparedAttachments
+                  }
+                : message
+            )));
             await props.onSend(text, props.selectedModel, {
               planMode,
               approvalPolicy,
-              attachments: outgoingAttachments
+              attachments: preparedAttachments
             });
             if (timeoutHandle.current) {
               window.clearTimeout(timeoutHandle.current);

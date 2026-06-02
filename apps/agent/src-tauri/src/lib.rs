@@ -1,5 +1,6 @@
 pub mod agent_config;
 pub mod agent_runtime;
+pub mod attachment_store;
 pub mod codex_adapter;
 pub mod codex_history;
 pub mod commands;

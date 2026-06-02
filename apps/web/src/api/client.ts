@@ -75,6 +75,24 @@ export class ApiClient {
     });
   }
 
+  async uploadAttachment(file: File): Promise<{ path: string }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await this.http.request<{ path: string }>({
+        url: "/attachments",
+        method: "POST",
+        data: formData,
+        headers: {
+          ...(this.token ? { authorization: `Bearer ${this.token}` } : {})
+        }
+      });
+      return response.data;
+    } catch (caught) {
+      throw readApiError(caught);
+    }
+  }
+
   async createSession(deviceId: string, projectId: string, title: string): Promise<SessionSummary> {
     return this.request("/sessions", {
       method: "POST",

@@ -1,8 +1,10 @@
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
 import Fastify from "fastify";
 import { ZodError } from "zod";
+import { registerAttachmentRoutes } from "./modules/attachments/attachment.routes";
 import { registerAuthRoutes } from "./modules/auth/auth.routes";
 import { registerDeviceRoutes } from "./modules/devices/device.routes";
 import { registerProjectRoutes } from "./modules/projects/project.routes";
@@ -16,6 +18,12 @@ export async function buildApp(options: { jwtSecret: string }) {
 
   await app.register(cors, { origin: true, credentials: true });
   await app.register(jwt, { secret: options.jwtSecret });
+  await app.register(multipart, {
+    limits: {
+      files: 10,
+      fileSize: 20 * 1024 * 1024
+    }
+  });
   await app.register(websocket);
   await app.register(prismaPlugin);
   await app.register(authPlugin);
@@ -36,6 +44,7 @@ export async function buildApp(options: { jwtSecret: string }) {
 
   app.get("/health", async () => ({ ok: true }));
   await registerAuthRoutes(app);
+  await registerAttachmentRoutes(app);
   await registerDeviceRoutes(app);
   await registerProjectRoutes(app);
   await registerSessionRoutes(app);

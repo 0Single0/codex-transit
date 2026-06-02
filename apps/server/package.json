@@ -16,6 +16,7 @@
     "@codex-transit/shared": "workspace:*",
     "@fastify/cors": "^10.0.2",
     "@fastify/jwt": "^9.0.2",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/websocket": "^11.0.1",
     "@prisma/client": "^6.0.1",
     "argon2": "^0.41.1",

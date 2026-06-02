@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
+    attachment_store::materialize_attachment,
     codex_adapter::{
         format_error_chain, CodexAdapter, CodexExecOptions, CodexSessionProcess, OutputStream,
         ProcessOutput, CODEX_THREAD_ID_PREFIX, CODEX_TOOL_CALL_PREFIX, CODEX_TURN_COMPLETED_PREFIX,
@@ -143,11 +144,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                         model,
                         approval_policy,
                         plan_mode: plan_mode.unwrap_or(false),
-                        attachments: attachments
-                            .unwrap_or_default()
-                            .into_iter()
-                            .filter_map(|attachment| (attachment.kind == "image").then_some(attachment.path))
-                            .collect(),
+                        attachments: self.materialize_attachments(attachments.unwrap_or_default()).await?,
                     },
                 )
                 .await
@@ -574,6 +571,18 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
             })
             .await?;
         Ok(())
+    }
+
+    async fn materialize_attachments(&self, attachments: Vec<SessionAttachment>) -> Result<Vec<String>> {
+        let mut materialized = Vec::new();
+        for attachment in attachments {
+            if attachment.kind != "image" {
+                continue;
+            }
+            let path = materialize_attachment(&attachment.path, &attachment.name).await?;
+            materialized.push(path.to_string_lossy().to_string());
+        }
+        Ok(materialized)
     }
 
     fn output_to_event(&mut self, output: ProcessOutput) -> Result<RealtimeEvent> {

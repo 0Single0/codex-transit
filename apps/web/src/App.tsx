@@ -374,13 +374,19 @@ export function App() {
                   approvalPolicy: options.approvalPolicy,
                   attachments: options.attachments.map((attachment) => ({
                     name: attachment.name,
-                    path: attachment.path,
+                    path: attachment.uploadedPath ?? attachment.path,
                     ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
                     kind: attachment.kind
                   }))
                 }
               ));
             }}
+            onUploadAttachment={(file) => runAuthorized(() => api.uploadAttachment(file)).then((result) => {
+              if (!result) {
+                throw new Error(labels.sendFailed);
+              }
+              return result;
+            })}
           />
         ) : null}
 

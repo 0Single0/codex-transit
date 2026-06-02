@@ -7,6 +7,8 @@ export type AttachmentItem = {
   mimeType?: string;
   kind: "image" | "file";
   previewUrl?: string;
+  uploadedPath?: string;
+  file?: File;
 };
 
 export type ToolCallItem = {
