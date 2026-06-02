@@ -27,7 +27,6 @@ export function ChatComposer(props: {
   modelError: string | null;
   selectedModel: string | null;
   attachments: AttachmentItem[];
-  planMode: boolean;
   approvalPolicy: ApprovalPolicy;
   plusMenuOpen: boolean;
   approvalMenuOpen: boolean;
@@ -37,7 +36,6 @@ export function ChatComposer(props: {
   onTogglePlusMenu: () => void;
   onOpenApprovalMenu: () => void;
   onCloseMenus: () => void;
-  onTogglePlanMode: () => void;
   onPickFiles: () => void;
   onSelectApprovalPolicy: (value: ApprovalPolicy) => void;
 }) {
@@ -79,10 +77,7 @@ export function ChatComposer(props: {
             <ComposerPlusMenu
               labels={props.labels}
               open={props.plusMenuOpen}
-              planMode={props.planMode}
-              onTogglePlanMode={props.onTogglePlanMode}
               onPickFiles={props.onPickFiles}
-              onOpenApprovalMenu={props.onOpenApprovalMenu}
             />
             <ComposerApprovalMenu
               labels={props.labels}

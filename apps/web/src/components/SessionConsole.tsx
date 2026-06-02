@@ -37,7 +37,6 @@ export function SessionConsole(props: {
     text: string,
     model: string | null,
     options: {
-      planMode: boolean;
       approvalPolicy: ApprovalPolicy;
       attachments: AttachmentItem[];
     }
@@ -52,7 +51,6 @@ export function SessionConsole(props: {
   const [toolCalls, setToolCalls] = useState<ToolCallItem[]>([]);
   const [liveTurn, setLiveTurn] = useState<LiveTurnState | null>(null);
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
-  const [planMode, setPlanMode] = useState(false);
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>("full");
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
@@ -271,7 +269,6 @@ export function SessionConsole(props: {
         modelError={props.modelError}
         selectedModel={props.selectedModel}
         attachments={attachments}
-        planMode={planMode}
         approvalPolicy={approvalPolicy}
         plusMenuOpen={plusMenuOpen}
         approvalMenuOpen={approvalMenuOpen}
@@ -286,7 +283,6 @@ export function SessionConsole(props: {
           setPlusMenuOpen(false);
           setApprovalMenuOpen(false);
         }}
-        onTogglePlanMode={() => setPlanMode((current) => !current)}
         onPickFiles={() => fileInputRef.current?.click()}
         onSelectApprovalPolicy={setApprovalPolicy}
         onSubmit={async (event) => {
@@ -345,7 +341,6 @@ export function SessionConsole(props: {
                 : message
             )));
             await props.onSend(text, props.selectedModel, {
-              planMode,
               approvalPolicy,
               attachments: preparedAttachments
             });

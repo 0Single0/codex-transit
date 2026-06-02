@@ -359,7 +359,6 @@ export function App() {
               text,
               model,
               options: {
-                planMode: boolean;
                 approvalPolicy: ApprovalPolicy;
                 attachments: AttachmentItem[];
               }
@@ -370,7 +369,6 @@ export function App() {
                 activeCodexSessionId ?? undefined,
                 model ?? undefined,
                 {
-                  planMode: options.planMode,
                   approvalPolicy: options.approvalPolicy,
                   attachments: options.attachments.map((attachment) => ({
                     name: attachment.name,
