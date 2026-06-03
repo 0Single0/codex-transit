@@ -46,3 +46,6 @@ worktrees/
 
 # codex local progress
 .cursor/progress/
+
+# local docs
+docs/
