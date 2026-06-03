@@ -81,7 +81,8 @@ export function ProjectHistoryPage() {
     navigate(buildSessionPath(deviceId, projectId, session.id), {
       state: {
         historyMessages,
-        codexSessionId: item.codexSessionId
+        codexSessionId: item.codexSessionId,
+        returnToHistory: true
       }
     });
   }

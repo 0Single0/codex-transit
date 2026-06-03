@@ -78,6 +78,9 @@ export function SessionConsoleContainer(props: {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const initialMessageConsumedForSession = useRef<string | null>(null);
   const liveConversationItemsRef = useRef<ConversationItem[]>([]);
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
 
   const historyConversation = useMemo(
     () => historyMessagesToConversation(props.historyMessages),
@@ -117,15 +120,40 @@ export function SessionConsoleContainer(props: {
     }
     initialMessageConsumedForSession.current = null;
     liveConversationItemsRef.current = [];
+    shouldStickToBottomRef.current = true;
   }, [props.sessionId]);
 
   useEffect(() => {
     return () => revokeAttachmentPreviews(attachments);
   }, []);
 
+  useEffect(() => {
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
+
+    function handleScroll() {
+      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      shouldStickToBottomRef.current = distanceFromBottom < 48;
+    }
+
+    handleScroll();
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    return () => viewport.removeEventListener("scroll", handleScroll);
+  }, []);
+
   function clearLiveConversation() {
     liveConversationItemsRef.current = [];
     setLiveConversationItems([]);
+  }
+
+  function scrollToBottom(force = false, behavior: ScrollBehavior = "auto") {
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
+    if (!force && !shouldStickToBottomRef.current) return;
+    viewport.scrollTo({
+      top: viewport.scrollHeight,
+      behavior
+    });
   }
 
   function commitLiveConversation(extraAssistantText?: string) {
@@ -313,6 +341,13 @@ export function SessionConsoleContainer(props: {
     props.sessionId
   ]);
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [visibleConversation, liveTurn]);
+
   return (
     <section className="grid h-full min-h-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[radial-gradient(circle_at_top,_#ffffff_0%,_#f7fafe_38%,_#f7fafe_100%)] text-slate-900">
       <style>{`
@@ -398,7 +433,7 @@ export function SessionConsoleContainer(props: {
         </div>
       </header>
 
-      <div className="codex-scrollbar min-h-0 overflow-y-auto px-5 pb-6 pt-1">
+      <div className="codex-scrollbar min-h-0 overflow-y-auto px-5 pb-6 pt-1" ref={scrollViewportRef}>
         <div className="space-y-5">
           {visibleConversation.length ? (
             visibleConversation.map((item) => (
@@ -416,6 +451,7 @@ export function SessionConsoleContainer(props: {
             </section>
           )}
           {liveTurn && liveConversationItems.length === 0 ? <LiveTurnBubble labels={props.labels} liveTurn={liveTurn} /> : null}
+          <div aria-hidden className="h-px w-full" ref={bottomAnchorRef} />
         </div>
       </div>
 
@@ -471,11 +507,15 @@ export function SessionConsoleContainer(props: {
             setConversationItems((current) => [...current, localUserMessage]);
             setAttachments([]);
             clearLiveConversation();
+            shouldStickToBottomRef.current = true;
             setLiveTurn({
               status: "waiting",
               text: "",
               errorMessage: null,
               turnKey: `${props.sessionId ?? "draft"}-${Date.now()}`
+            });
+            window.requestAnimationFrame(() => {
+              scrollToBottom(true, "smooth");
             });
 
             try {

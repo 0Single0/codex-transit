@@ -11,6 +11,7 @@ import { buildProjectHistoryPath, buildProjectHomePath } from "../routes";
 type SessionPageLocationState = {
   historyMessages?: CodexHistoryMessage[];
   codexSessionId?: string;
+  returnToHistory?: boolean;
   pendingInitialMessage?: {
     text: string;
     model: string | null;
@@ -108,7 +109,13 @@ export function SessionPage() {
       modelError={models.error}
       models={models.models}
       modelsLoading={models.loading}
-      onBack={() => navigate(buildProjectHomePath(deviceId, projectId))}
+      onBack={() => {
+        if (locationState?.returnToHistory) {
+          navigate(buildProjectHistoryPath(deviceId, projectId));
+          return;
+        }
+        navigate(buildProjectHomePath(deviceId, projectId));
+      }}
       onHistory={() => navigate(buildProjectHistoryPath(deviceId, projectId))}
       onSelectModel={setSelectedModel}
       onSend={async (text, model, options) => {
