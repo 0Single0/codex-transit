@@ -43,3 +43,6 @@ apps/agent/src-tauri/.taurignore
 # local worktrees
 .worktrees/
 worktrees/
+
+# codex local progress
+.cursor/progress/
