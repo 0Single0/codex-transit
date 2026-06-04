@@ -49,14 +49,50 @@ describe("createAgentApi", () => {
     expect(path).toBe("E:\\code\\codex-transit");
   });
 
+  it("removes a project through the Tauri command", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const api = createAgentApi(invoke);
+
+    await api.removeProject("project-1");
+
+    expect(invoke).toHaveBeenCalledWith("remove_project", {
+      projectId: "project-1"
+    });
+  });
+
+  it("reads device overview through the Tauri command", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      name: "DESKTOP-7G8H2K9",
+      platform: "windows",
+      osLabel: "Windows 10 Pro",
+      version: "0.1.0"
+    });
+    const api = createAgentApi(invoke);
+
+    const overview = await api.getDeviceOverview();
+
+    expect(invoke).toHaveBeenCalledWith("get_device_overview");
+    expect(overview.name).toBe("DESKTOP-7G8H2K9");
+  });
+
+  it("clears local agent settings through the Tauri command", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const api = createAgentApi(invoke);
+
+    await api.clearSettings();
+
+    expect(invoke).toHaveBeenCalledWith("clear_agent_settings");
+  });
+
   it("starts the agent runtime through the Tauri command", async () => {
-    const invoke = vi.fn().mockResolvedValue({ running: true });
+    const invoke = vi.fn().mockResolvedValue({ running: true, connected: false, lastError: null });
     const api = createAgentApi(invoke);
 
     const status = await api.startRuntime();
 
     expect(invoke).toHaveBeenCalledWith("start_agent_runtime");
     expect(status.running).toBe(true);
+    expect(status.connected).toBe(false);
   });
 
   it("binds the agent with a pairing code", async () => {

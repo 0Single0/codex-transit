@@ -1,4 +1,4 @@
-use codex_transit_agent::codex_adapter::CODEX_THREAD_ID_PREFIX;
+use codex_transit_agent::codex_adapter::{CodexExecOptions, CODEX_THREAD_ID_PREFIX};
 use codex_transit_agent::codex_adapter::OutputStream;
 use codex_transit_agent::codex_adapter::ProcessOutput;
 use codex_transit_agent::protocol::RealtimeEvent;
@@ -30,6 +30,7 @@ impl SessionProcessRunner for FakeRunner {
         _session_id: Uuid,
         _working_dir: std::path::PathBuf,
         _prompt: String,
+        _options: CodexExecOptions,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> anyhow::Result<Self::Process> {
         Ok(FakeProcess)
@@ -41,6 +42,7 @@ impl SessionProcessRunner for FakeRunner {
         _working_dir: std::path::PathBuf,
         _codex_session_id: String,
         _prompt: String,
+        _options: CodexExecOptions,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> anyhow::Result<Self::Process> {
         Ok(FakeProcess)

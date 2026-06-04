@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 use codex_transit_agent::{
-    codex_adapter::{OutputStream, ProcessOutput},
+    codex_adapter::{CodexExecOptions, OutputStream, ProcessOutput},
     diff_provider::ProjectDiffProvider,
     file_watcher::FileChange,
     protocol::RealtimeEvent,
@@ -56,13 +56,13 @@ impl SessionProcessRunner for FakeRunner {
         session_id: Uuid,
         working_dir: PathBuf,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
         let mut state = self.state.lock().unwrap();
         state.started_dirs.push(working_dir);
         state.started_prompts.push(prompt);
-        state.selected_models.push(model);
+        state.selected_models.push(options.model);
         drop(state);
         Ok(FakeProcess {
             session_id,
@@ -76,14 +76,14 @@ impl SessionProcessRunner for FakeRunner {
         working_dir: PathBuf,
         codex_session_id: String,
         prompt: String,
-        model: Option<String>,
+        options: CodexExecOptions,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
         let mut state = self.state.lock().unwrap();
         state.started_dirs.push(working_dir);
         state.resumed_sessions.push(codex_session_id);
         state.started_prompts.push(prompt);
-        state.selected_models.push(model);
+        state.selected_models.push(options.model);
         drop(state);
         Ok(FakeProcess {
             session_id,
@@ -100,7 +100,7 @@ impl SessionProcessRunner for FailingRunner {
         _session_id: Uuid,
         _working_dir: PathBuf,
         _prompt: String,
-        _model: Option<String>,
+        _options: CodexExecOptions,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
         anyhow::bail!("codex executable not found");
@@ -112,7 +112,7 @@ impl SessionProcessRunner for FailingRunner {
         _working_dir: PathBuf,
         _codex_session_id: String,
         _prompt: String,
-        _model: Option<String>,
+        _options: CodexExecOptions,
         _output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
         anyhow::bail!("codex executable not found");
@@ -145,6 +145,23 @@ fn start_event() -> RealtimeEvent {
         project_id: PROJECT_ID.parse().unwrap(),
         session_id: SESSION_ID.parse().unwrap(),
         codex_session_id: None,
+    }
+}
+
+fn session_input_event(session_id: Uuid, project_id: Uuid, text: &str) -> RealtimeEvent {
+    RealtimeEvent::SessionInput {
+        event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
+        timestamp: "2026-06-01T00:00:01.000Z".to_string(),
+        user_id: USER_ID.parse().unwrap(),
+        device_id: DEVICE_ID.parse().unwrap(),
+        project_id,
+        session_id,
+        codex_session_id: None,
+        model: None,
+        plan_mode: None,
+        approval_policy: None,
+        attachments: None,
+        text: text.to_string(),
     }
 }
 
@@ -263,6 +280,10 @@ async fn resumes_codex_history_for_bound_session_input() {
             project_id,
             session_id,
             codex_session_id: Some("019e8268-8f45-7422-aff8-5524d4c6990b".to_string()),
+            model: None,
+            plan_mode: None,
+            approval_policy: None,
+            attachments: None,
             text: "continue this".to_string(),
         })
         .await
@@ -311,16 +332,7 @@ async fn handles_start_and_input_events() {
     manager.handle_event(start_event()).await.unwrap();
 
     manager
-        .handle_event(RealtimeEvent::SessionInput {
-            event_id: "00000000-0000-4000-8000-000000000011".parse().unwrap(),
-            timestamp: "2026-06-01T00:00:01.000Z".to_string(),
-            user_id: USER_ID.parse().unwrap(),
-            device_id: DEVICE_ID.parse().unwrap(),
-            project_id,
-            session_id,
-            codex_session_id: None,
-            text: "implement it".to_string(),
-        })
+        .handle_event(session_input_event(session_id, project_id, "implement it"))
         .await
         .unwrap();
 
@@ -351,6 +363,9 @@ async fn forwards_selected_model_to_runner() {
             session_id,
             codex_session_id: None,
             model: Some("gpt-5.3-codex".to_string()),
+            plan_mode: None,
+            approval_policy: None,
+            attachments: None,
             text: "hello".to_string(),
         })
         .await

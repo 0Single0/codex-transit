@@ -13,8 +13,20 @@
     "windows": [
       {
         "title": "Codex Transit Agent",
-        "width": 720,
-        "height": 520
+        "width": 545,
+        "height": 507,
+        "decorations": false
+      },
+      {
+        "label": "tray-popover",
+        "title": "Codex Agent",
+        "width": 318,
+        "height": 354,
+        "decorations": false,
+        "visible": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true
       }
     ]
   },

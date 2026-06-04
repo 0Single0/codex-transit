@@ -1,6 +1,6 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
@@ -60,12 +60,13 @@ impl ServerClient {
         &self,
         outbound_rx: mpsc::Receiver<RealtimeEvent>,
         inbound_tx: mpsc::Sender<RealtimeEvent>,
+        connected_tx: Option<oneshot::Sender<()>>,
     ) -> Result<()> {
         let (socket, _) = connect_async(&self.url).await?;
         let (mut write, mut read) = socket.split();
         let mut outbound_rx = outbound_rx;
 
-        let writer = tokio::spawn(async move {
+        let mut writer = tokio::spawn(async move {
             while let Some(event) = outbound_rx.recv().await {
                 let payload = serde_json::to_string(&event)?;
                 write.send(Message::Text(payload.into())).await?;
@@ -73,19 +74,44 @@ impl ServerClient {
             anyhow::Ok(())
         });
 
-        let reader = tokio::spawn(async move {
+        let mut reader = tokio::spawn(async move {
+            let mut connected_tx = connected_tx;
             while let Some(message) = read.next().await {
                 let message = message?;
                 if message.is_text() {
-                    if let Some(event) = parse_realtime_message(message.to_text()?)? {
+                    let text = message.to_text()?;
+                    if is_realtime_connected_ack(text)? {
+                        if let Some(connected_tx) = connected_tx.take() {
+                            let _ = connected_tx.send(());
+                        }
+                        continue;
+                    }
+                    if let Some(event) = parse_realtime_message(text)? {
                         inbound_tx.send(event).await?;
                     }
                 }
             }
+            if connected_tx.is_some() {
+                bail!("realtime connection closed before server acknowledgement");
+            }
             anyhow::Ok(())
         });
 
-        let _ = tokio::try_join!(writer, reader)?;
+        tokio::select! {
+            writer_result = &mut writer => {
+                reader.abort();
+                writer_result??;
+            }
+            reader_result = &mut reader => {
+                writer.abort();
+                reader_result??;
+            }
+        }
         Ok(())
     }
+}
+
+fn is_realtime_connected_ack(text: &str) -> Result<bool> {
+    let value: serde_json::Value = serde_json::from_str(text)?;
+    Ok(value.get("type").and_then(|kind| kind.as_str()) == Some("connected"))
 }

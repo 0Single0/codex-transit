@@ -5,7 +5,7 @@ use codex_transit_agent::{
         pump_next_file_change, pump_next_normalized_file_change, pump_next_process_output,
         run_agent_loop, run_agent_once,
     },
-    codex_adapter::{OutputStream, ProcessOutput},
+    codex_adapter::{CodexExecOptions, OutputStream, ProcessOutput},
     protocol::RealtimeEvent,
     session_manager::{ManagedSessionProcess, SessionManager, SessionProcessRunner},
 };
@@ -36,6 +36,7 @@ impl SessionProcessRunner for RuntimeRunner {
         _session_id: Uuid,
         _working_dir: PathBuf,
         prompt: String,
+        _options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
         self.prompts.lock().unwrap().push(prompt);
@@ -51,6 +52,7 @@ impl SessionProcessRunner for RuntimeRunner {
         _working_dir: PathBuf,
         _codex_session_id: String,
         prompt: String,
+        _options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<Self::Process> {
         self.prompts.lock().unwrap().push(prompt);
@@ -233,6 +235,10 @@ fn session_input_event(project_id: Uuid, session_id: Uuid, text: &str) -> Realti
         project_id,
         session_id,
         codex_session_id: None,
+        model: None,
+        plan_mode: None,
+        approval_policy: None,
+        attachments: None,
         text: text.to_string(),
     }
 }

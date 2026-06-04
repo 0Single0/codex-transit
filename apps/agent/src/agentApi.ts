@@ -16,6 +16,15 @@ export type ProjectEntry = {
 
 export type AgentRuntimeStatus = {
   running: boolean;
+  connected: boolean;
+  lastError: string | null;
+};
+
+export type AgentDeviceOverview = {
+  name: string;
+  platform: string;
+  osLabel: string;
+  version: string;
 };
 
 export type BindDeviceRequest = {
@@ -74,12 +83,40 @@ export function createAgentApi(invoke: Invoke = tauriInvoke, fetcher: typeof fet
       return invoke<void>("save_agent_settings", { settings });
     },
 
+    clearSettings() {
+      return invoke<void>("clear_agent_settings");
+    },
+
+    exitApp() {
+      return invoke<void>("exit_app");
+    },
+
+    openMainWindow() {
+      return invoke<void>("open_main_window");
+    },
+
+    openSettingsWindow(section: "general" | "connection" | "about") {
+      return invoke<void>("open_settings_window", { section });
+    },
+
+    hideTrayPopover() {
+      return invoke<void>("hide_tray_popover");
+    },
+
     listProjects() {
       return invoke<ProjectEntry[]>("list_projects");
     },
 
+    getDeviceOverview() {
+      return invoke<AgentDeviceOverview>("get_device_overview");
+    },
+
     addProject(path: string) {
       return invoke<ProjectEntry>("add_project", { path });
+    },
+
+    removeProject(projectId: string) {
+      return invoke<void>("remove_project", { projectId });
     },
 
     chooseProjectDirectory() {

@@ -13,6 +13,7 @@ fn builds_codex_exec_command_with_project() {
         CodexExecOptions {
             sandbox: Some("workspace-write".to_string()),
             model: Some("gpt-5".to_string()),
+            ..CodexExecOptions::default()
         },
     );
 

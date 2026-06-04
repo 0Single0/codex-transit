@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Allow the main desktop agent window to use required Tauri APIs.",
+  "windows": ["main", "tray-popover"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-minimize",
+    "core:window:allow-unminimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-skip-taskbar",
+    "core:window:allow-start-dragging"
+  ]
+}

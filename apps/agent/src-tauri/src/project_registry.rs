@@ -53,6 +53,10 @@ impl ProjectRegistry {
         self.projects.get(project_id)
     }
 
+    pub fn remove_project(&mut self, project_id: &Uuid) -> Option<ProjectEntry> {
+        self.projects.remove(project_id)
+    }
+
     pub fn list(&self) -> Vec<ProjectEntry> {
         self.projects.values().cloned().collect()
     }

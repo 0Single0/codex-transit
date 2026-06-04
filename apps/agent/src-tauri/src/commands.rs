@@ -1,6 +1,8 @@
 use std::{
+    fs,
     path::{Path, PathBuf},
-    sync::Mutex,
+    process::Command,
+    sync::{Arc, Mutex},
 };
 
 use serde::{Deserialize, Serialize};
@@ -21,10 +23,19 @@ use crate::{
     session_manager::SessionManager,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDeviceOverview {
+    pub name: String,
+    pub platform: String,
+    pub os_label: String,
+    pub version: String,
+}
+
 pub struct AgentState {
     pub projects: Mutex<ProjectRegistry>,
     pub config: Mutex<AgentConfig>,
-    pub runtime: Mutex<AgentRuntimeState>,
+    pub runtime: Arc<Mutex<AgentRuntimeState>>,
     storage: AgentStorage,
 }
 
@@ -36,7 +47,7 @@ impl Default for AgentState {
                 ProjectRegistry::load_from_file(&storage.projects_path).unwrap_or_default(),
             ),
             config: Mutex::new(AgentConfig::load_from_file(&storage.settings_path).unwrap_or_default()),
-            runtime: Mutex::new(AgentRuntimeState::default()),
+            runtime: Arc::new(Mutex::new(AgentRuntimeState::default())),
             storage,
         }
     }
@@ -84,7 +95,7 @@ impl AgentState {
                 ProjectRegistry::load_from_file(&storage.projects_path).unwrap_or_default(),
             ),
             config: Mutex::new(AgentConfig::load_from_file(&storage.settings_path).unwrap_or_default()),
-            runtime: Mutex::new(AgentRuntimeState::default()),
+            runtime: Arc::new(Mutex::new(AgentRuntimeState::default())),
             storage,
         }
     }
@@ -93,6 +104,8 @@ impl AgentState {
 #[derive(Default)]
 pub struct AgentRuntimeState {
     running: bool,
+    connected: bool,
+    last_error: Option<String>,
     shutdown_tx: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<()>>,
 }
@@ -101,6 +114,8 @@ pub struct AgentRuntimeState {
 #[serde(rename_all = "camelCase")]
 pub struct AgentRuntimeStatus {
     pub running: bool,
+    pub connected: bool,
+    pub last_error: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -129,6 +144,22 @@ pub fn add_project(path: String, state: State<AgentState>) -> Result<ProjectEntr
 }
 
 #[tauri::command]
+pub fn remove_project(project_id: uuid::Uuid, state: State<AgentState>) -> Result<(), String> {
+    let mut projects = state
+        .projects
+        .lock()
+        .map_err(|_| "project registry locked".to_string())?;
+    projects
+        .remove_project(&project_id)
+        .ok_or_else(|| "project not found".to_string())?;
+    projects
+        .save_to_file(&state.storage.projects_path)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+
+#[tauri::command]
 pub fn choose_project_directory() -> Result<Option<String>, String> {
     Ok(rfd::FileDialog::new()
         .pick_folder()
@@ -142,6 +173,88 @@ pub fn list_projects(state: State<AgentState>) -> Result<Vec<ProjectEntry>, Stri
         .lock()
         .map_err(|_| "project registry locked".to_string())?;
     Ok(projects.list())
+}
+
+#[tauri::command]
+pub fn get_device_overview() -> AgentDeviceOverview {
+    let platform = std::env::consts::OS.to_string();
+    let name = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "Desktop Agent".to_string());
+    let os_label = detect_os_label().unwrap_or_else(|| match std::env::consts::OS {
+        "windows" => "Windows".to_string(),
+        "macos" => "macOS".to_string(),
+        "linux" => "Linux".to_string(),
+        other => other.to_string(),
+    });
+
+    AgentDeviceOverview {
+        name,
+        platform,
+        os_label,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    }
+}
+
+fn detect_os_label() -> Option<String> {
+    match std::env::consts::OS {
+        "windows" => command_stdout(
+            "powershell.exe",
+            &[
+                "-NoProfile",
+                "-Command",
+                "$caption=(Get-CimInstance Win32_OperatingSystem).Caption; [BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes($caption)) -replace '-'",
+            ],
+        )
+        .and_then(|hex| decode_utf16le_hex(&hex)),
+        "macos" => {
+            let name = command_stdout("sw_vers", &["-productName"])?;
+            let version = command_stdout("sw_vers", &["-productVersion"])?;
+            Some(format!("{name} {version}"))
+        }
+        "linux" => linux_pretty_name(),
+        _ => None,
+    }
+}
+
+fn decode_utf16le_hex(hex: &str) -> Option<String> {
+    let compact: String = hex.chars().filter(|value| !value.is_whitespace()).collect();
+    if compact.len() % 4 != 0 {
+        return None;
+    }
+    let bytes = (0..compact.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).ok())
+        .collect::<Option<Vec<_>>>()?;
+    let words = bytes
+        .chunks_exact(2)
+        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect::<Vec<_>>();
+    String::from_utf16(&words).ok()
+}
+
+fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
+    let output = Command::new(program).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn linux_pretty_name() -> Option<String> {
+    let body = fs::read_to_string("/etc/os-release").ok()?;
+    for line in body.lines() {
+        let Some(value) = line.strip_prefix("PRETTY_NAME=") else {
+            continue;
+        };
+        return Some(value.trim_matches('"').to_string());
+    }
+    None
 }
 
 pub fn save_agent_settings_in_state(
@@ -178,6 +291,20 @@ pub fn save_agent_settings(
 #[tauri::command]
 pub fn get_agent_settings(state: State<AgentState>) -> Result<Option<AgentSettings>, String> {
     get_saved_agent_settings(&state)
+}
+
+#[tauri::command]
+pub fn clear_agent_settings(state: State<AgentState>) -> Result<(), String> {
+    mark_agent_runtime_stopped(&state)?;
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "agent config locked".to_string())?;
+    *config = AgentConfig::default();
+    if state.storage.settings_path.exists() {
+        fs::remove_file(&state.storage.settings_path).map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 pub fn build_project_sync_request_from_state(
@@ -241,6 +368,8 @@ fn reserve_agent_runtime_start(state: &AgentState) -> Result<RuntimeLaunch, Stri
     }
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     runtime.running = true;
+    runtime.connected = false;
+    runtime.last_error = None;
     runtime.shutdown_tx = Some(shutdown_tx);
     Ok(AgentRuntimeStartup {
         url: realtime.url.to_string(),
@@ -272,6 +401,7 @@ fn store_agent_runtime_task(state: &AgentState, task: JoinHandle<()>) -> Result<
 }
 
 fn spawn_agent_runtime_task(
+    runtime_state: Arc<Mutex<AgentRuntimeState>>,
     realtime: AgentRealtimeConfig,
     projects: Vec<ProjectEntry>,
     shutdown_rx: oneshot::Receiver<()>,
@@ -292,15 +422,23 @@ fn spawn_agent_runtime_task(
 
     let server_client = ServerClient::new(realtime.url.to_string());
     let device_id = realtime.device_id.parse().ok();
+    let runtime_for_connection = runtime_state.clone();
     let task = tokio::spawn(async move {
+        let (connected_tx, connected_rx) = oneshot::channel();
         let connection = tokio::spawn(async move {
-            if let Err(error) = server_client
-                .connect(server_outbound_rx, server_inbound_tx)
+            let result = server_client
+                .connect(server_outbound_rx, server_inbound_tx, Some(connected_tx))
                 .await
-            {
+                .map_err(|error| error.to_string());
+            if let Err(error) = &result {
                 eprintln!("agent realtime connection stopped: {error}");
             }
+            let _ = mark_agent_runtime_disconnected_in_runtime(&runtime_for_connection, result.err());
         });
+
+        if connected_rx.await.is_ok() {
+            let _ = mark_agent_runtime_connected_in_runtime(&runtime_state);
+        }
 
         if let Some(device_id) = device_id {
             let snapshot = fetch_provider_models().await;
@@ -345,6 +483,28 @@ pub fn mark_agent_runtime_stopped(state: &AgentState) -> Result<(), String> {
         task.abort();
     }
     runtime.running = false;
+    runtime.connected = false;
+    Ok(())
+}
+
+fn mark_agent_runtime_connected_in_runtime(runtime_state: &Arc<Mutex<AgentRuntimeState>>) -> Result<(), String> {
+    let mut runtime = runtime_state
+        .lock()
+        .map_err(|_| "agent runtime locked".to_string())?;
+    runtime.connected = true;
+    runtime.last_error = None;
+    Ok(())
+}
+
+fn mark_agent_runtime_disconnected_in_runtime(
+    runtime_state: &Arc<Mutex<AgentRuntimeState>>,
+    error: Option<String>,
+) -> Result<(), String> {
+    let mut runtime = runtime_state
+        .lock()
+        .map_err(|_| "agent runtime locked".to_string())?;
+    runtime.connected = false;
+    runtime.last_error = error;
     Ok(())
 }
 
@@ -357,6 +517,8 @@ pub fn get_agent_runtime_status_from_state(
         .map_err(|_| "agent runtime locked".to_string())?;
     Ok(AgentRuntimeStatus {
         running: runtime.running,
+        connected: runtime.connected,
+        last_error: runtime.last_error.clone(),
     })
 }
 
@@ -369,7 +531,7 @@ pub async fn start_agent_runtime(state: State<'_, AgentState>) -> Result<AgentRu
         .map_err(|_| "project registry locked".to_string())?
         .list();
     let launch = reserve_agent_runtime_start(&state)?;
-    let task = match spawn_agent_runtime_task(realtime, projects, launch.shutdown_rx) {
+    let task = match spawn_agent_runtime_task(state.runtime.clone(), realtime, projects, launch.shutdown_rx) {
         Ok(task) => task,
         Err(error) => {
             mark_agent_runtime_stopped(&state)?;
