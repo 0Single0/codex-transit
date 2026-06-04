@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+.git
+.cursor
+.tmp-cargo-target
+**/target
+**/target-local
+**/dist
+coverage
+*.log
+.DS_Store

@@ -12,7 +12,11 @@
     "typecheck": "pnpm -r typecheck",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
+    "docker:deploy": "docker compose -f docker-compose.deploy.yml up -d --build",
+    "docker:stop": "docker compose -f docker-compose.deploy.yml down",
+    "docker:logs": "docker compose -f docker-compose.deploy.yml logs -f",
     "dev:agent": "pnpm --filter @codex-transit/agent dev",
+    "agent:bundle": "pnpm --filter @codex-transit/agent build",
     "verify": "pnpm typecheck && pnpm test"
   },
   "devDependencies": {

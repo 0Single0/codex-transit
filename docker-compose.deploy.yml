@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: codex_transit
+      POSTGRES_PASSWORD: codex_transit
+      POSTGRES_DB: codex_transit
+    ports:
+      - "54321:5432"
+    volumes:
+      - codex_transit_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codex_transit -d codex_transit"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://codex_transit:codex_transit@postgres:5432/codex_transit
+      JWT_SECRET: 01234567890123456789012345678901
+      PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE: http://localhost:4000
+        VITE_WS_BASE: ws://localhost:4000
+    depends_on:
+      - server
+    ports:
+      - "8080:80"
+
+volumes:
+  codex_transit_pg:
