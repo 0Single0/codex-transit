@@ -206,6 +206,16 @@ impl CodexAdapter {
         let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
         let invocation = prepare_command_invocation(PathBuf::from(exec.program), exec.args);
         let title = format!("Codex {}", session_id);
+        let command_exec = if prompt_stdin.is_some() {
+            "$stdinText = [Console]::In.ReadToEnd(); \
+if ($stdinText.Length -gt 0) { \
+  $stdinText | & $cmd[0] @($cmd[1..($cmd.Length-1)]); \
+} else { \
+  & $cmd[0] @($cmd[1..($cmd.Length-1)]); \
+}"
+        } else {
+            "& $cmd[0] @($cmd[1..($cmd.Length-1)]);"
+        };
         let script = format!(
             "$ErrorActionPreference='Stop'; \
 $Host.UI.RawUI.WindowTitle='{title}'; \
@@ -213,7 +223,7 @@ $Host.UI.RawUI.WindowTitle='{title}'; \
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); \
 Write-Output '{marker}'; \
 $cmd = @('{program}'{args}); \
-& $cmd[0] @($cmd[1..($cmd.Length-1)]); \
+{command_exec} \
 if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
             marker = escape_ps_single_quoted(marker),
             program = escape_ps_single_quoted(&invocation.program),
@@ -222,6 +232,7 @@ if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
                 .iter()
                 .map(|arg| format!(", '{}'", escape_ps_single_quoted(arg)))
                 .collect::<String>(),
+            command_exec = command_exec,
         );
 
         let mut child = Command::new("powershell")

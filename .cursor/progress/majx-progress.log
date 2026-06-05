@@ -585,3 +585,13 @@
   - apps/agent/src-tauri/src/agent_runtime.rs：事件分发失败回推到前端
   - apps/agent/src-tauri/src/session_manager.rs：补充 turn failed 事件发送能力
   - apps/web/src/api/client.test.ts：新增附件上传测试
+
+[2026-06-05]
+用户输入：等了半个多小时了还是没输出，怀疑压根没对话或未执行，排查
+完成：修复 Windows 可见 Codex 窗口下图片附件消息未真正送入 Codex stdin 的问题 (codex)
+  - 复现并确认带 --image 时 Codex CLI 需要 stdin prompt，而不是命令行尾参
+  - 修复 PowerShell 可见窗口执行脚本，使其在带附件时先读取父进程 stdin，再管道给 codex exec -
+  - 完成 agent cargo check 验证
+
+涉及文件：
+  - apps/agent/src-tauri/src/codex_adapter.rs：可见窗口模式下的 stdin 透传修复
