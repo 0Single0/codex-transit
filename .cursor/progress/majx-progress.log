@@ -606,3 +606,15 @@
 
 涉及文件：
   - apps/agent/src-tauri/src/codex_adapter.rs：带图消息执行分支与单元测试
+
+[2026-06-05]
+用户输入：还是有问题
+完成：修复已有会话带图消息的 resume 命令参数顺序错误 (codex)
+  - 手工复现确认旧命令 'exec --image ... resume <id> -' 非法，正确形式为 'exec resume --image ... <id> -'
+  - 调整 codex_adapter 的 resume 命令构造，把图片附件参数下沉到 resume 子命令后
+  - 在 codex_adapter_test.rs 新增 resume + image 参数顺序断言
+  - cargo check 通过；cargo test 仍受当前机器 Windows/Rust 配额不足影响未跑完
+
+涉及文件：
+  - apps/agent/src-tauri/src/codex_adapter.rs：resume 命令参数顺序修复
+  - apps/agent/src-tauri/tests/codex_adapter_test.rs：新增 resume + image 命令测试

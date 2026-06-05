@@ -287,12 +287,37 @@ fn build_codex_exec_command(
     resume_session_id: Option<String>,
 ) -> CodexExecCommand {
     let normalized_working_dir = normalize_for_windows_process_path(&working_dir);
-    let mut args = vec![
-        "exec".to_string(),
-        "--cd".to_string(),
-        normalized_working_dir.to_string_lossy().replace('\\', "/"),
-        "--json".to_string(),
-    ];
+    let mut args = vec!["exec".to_string()];
+    let working_dir_arg = normalized_working_dir.to_string_lossy().replace('\\', "/");
+
+    if let Some(codex_session_id) = resume_session_id {
+        args.push("--cd".to_string());
+        args.push(working_dir_arg);
+        args.push("--json".to_string());
+        args.push("resume".to_string());
+        if let Some(model) = options.model {
+            args.push("--model".to_string());
+            args.push(model);
+        }
+        if let Some(approval_policy) = options.approval_policy {
+            match approval_policy.as_str() {
+                "full" => args.push("--dangerously-bypass-approvals-and-sandbox".to_string()),
+                "auto" => args.push("--full-auto".to_string()),
+                _ => {}
+            }
+        }
+        for attachment in options.image_attachments {
+            args.push("--image".to_string());
+            args.push(attachment);
+        }
+        args.push("--skip-git-repo-check".to_string());
+        args.push(codex_session_id);
+        return CodexExecCommand { program, args };
+    }
+
+    args.push("--cd".to_string());
+    args.push(working_dir_arg);
+    args.push("--json".to_string());
     if let Some(sandbox) = options.sandbox {
         args.push("--sandbox".to_string());
         args.push(sandbox);
@@ -315,13 +340,6 @@ fn build_codex_exec_command(
     if options.plan_mode {
         args.push("-c".to_string());
         args.push(r#"model_reasoning_effort="high""#.to_string());
-    }
-    if let Some(codex_session_id) = resume_session_id {
-        args.extend(vec![
-            "resume".to_string(),
-            "--skip-git-repo-check".to_string(),
-            codex_session_id,
-        ]);
     }
     CodexExecCommand { program, args }
 }

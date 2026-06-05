@@ -58,6 +58,35 @@ fn builds_codex_exec_resume_command_for_history_session() {
 }
 
 #[test]
+fn builds_codex_exec_resume_command_with_image_after_resume_subcommand() {
+    let adapter = CodexAdapter::new("codex");
+    let command = adapter.build_resume_command(
+        PathBuf::from("C:/work/project"),
+        "019e8268-8f45-7422-aff8-5524d4c6990b",
+        CodexExecOptions {
+            image_attachments: vec!["C:/tmp/image.png".to_string()],
+            ..CodexExecOptions::default()
+        },
+    );
+
+    assert_eq!(command.program, "codex");
+    assert_eq!(
+        command.args,
+        vec![
+            "exec",
+            "--cd",
+            "C:/work/project",
+            "--json",
+            "resume",
+            "--image",
+            "C:/tmp/image.png",
+            "--skip-git-repo-check",
+            "019e8268-8f45-7422-aff8-5524d4c6990b"
+        ]
+    );
+}
+
+#[test]
 fn resolves_codex_command_from_windows_path_entries() {
     let command =
         resolve_codex_command_from_path("codex", "D:/nodejs;C:/Windows/System32", |candidate| {
