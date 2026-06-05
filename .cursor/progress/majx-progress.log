@@ -570,3 +570,18 @@
   - apps/agent/src-tauri/src/codex_history.rs：解析历史图片与嵌入式文件附件
   - apps/agent/src-tauri/src/codex_adapter.rs：普通文件转为本地路径上下文，图片继续走 --image
   - apps/agent/src-tauri/src/session_manager.rs：附件物化后分别归入图片/普通文件通道
+
+[2026-06-05]
+用户输入：样式太奇怪了太大了，改成图片在左边文件名在右然后改小点，然后就是我上传文件发送过去之后没返回？你再确认下链路是否正常，我不带文件发送是可以的
+完成：压缩附件预览样式并修复带图片附件时 Codex CLI 无返回的问题 (codex)
+  - 将附件预览改为左侧缩略图/图标、右侧文件名与类型的小尺寸横向结构
+  - 定位到 Codex CLI 在带 --image 时需要通过 stdin 提供 prompt，调整 agent 命令执行策略
+  - 补充附件处理失败的前端可见错误回传，避免发送后一直等待无反馈
+  - 新增上传附件 API 测试并完成 web/agent 校验
+
+涉及文件：
+  - apps/web/src/components/AttachmentPreview.tsx：横向小卡片样式
+  - apps/agent/src-tauri/src/codex_adapter.rs：图片附件走 stdin prompt 模式
+  - apps/agent/src-tauri/src/agent_runtime.rs：事件分发失败回推到前端
+  - apps/agent/src-tauri/src/session_manager.rs：补充 turn failed 事件发送能力
+  - apps/web/src/api/client.test.ts：新增附件上传测试

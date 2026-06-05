@@ -153,6 +153,23 @@ describe("ApiClient", () => {
     });
   });
 
+  it("uploads attachments with multipart form data", async () => {
+    const http = createHttpMock({ path: "http://localhost:4000/attachments/u/file.png" });
+    const api = new ApiClient("token", http);
+    const file = new File(["hi"], "demo.png", { type: "image/png" });
+
+    await api.uploadAttachment(file);
+
+    expect(http.request).toHaveBeenCalledWith({
+      url: "/attachments",
+      method: "POST",
+      data: expect.any(FormData),
+      headers: {
+        authorization: "Bearer token"
+      }
+    });
+  });
+
   it("claims Agent login QR pairings for the signed in user", async () => {
     const http = createHttpMock({ deviceId: "device-1" });
     const api = new ApiClient("token", http);

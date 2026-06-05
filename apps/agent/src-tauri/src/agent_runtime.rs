@@ -89,8 +89,12 @@ pub async fn run_agent_once<R: SessionProcessRunner>(
         return Ok(true);
     }
     if let Ok(event) = inbound_rx.try_recv() {
+        let failure_event = event.clone();
         if let Err(error) = dispatch_event(manager, event).await {
             eprintln!("agent event dispatch failed: {error}");
+            let _ = manager
+                .emit_turn_failed_for_event(&failure_event, format!("Attachment or session dispatch failed: {error}"))
+                .await;
         }
         return Ok(true);
     }
@@ -108,18 +112,24 @@ pub async fn run_agent_once_with_file_changes<R: SessionProcessRunner>(
     inbound_rx: &mut mpsc::Receiver<RealtimeEvent>,
     outbound_tx: &mpsc::Sender<RealtimeEvent>,
     file_change_rx: &mut mpsc::Receiver<FileChange>,
+    on_outbound_event: &mut impl FnMut(&RealtimeEvent),
 ) -> Result<bool> {
     if let Some(output) = manager.try_next_process_output() {
         manager.record_process_output(output).await?;
         return Ok(true);
     }
     if let Some(event) = manager.try_next_outbound_event() {
+        on_outbound_event(&event);
         outbound_tx.send(event).await?;
         return Ok(true);
     }
     if let Ok(event) = inbound_rx.try_recv() {
+        let failure_event = event.clone();
         if let Err(error) = dispatch_event(manager, event).await {
             eprintln!("agent event dispatch failed: {error}");
+            let _ = manager
+                .emit_turn_failed_for_event(&failure_event, format!("Attachment or session dispatch failed: {error}"))
+                .await;
         }
         return Ok(true);
     }
@@ -136,6 +146,7 @@ pub async fn run_agent_loop<R: SessionProcessRunner>(
     outbound_tx: &mpsc::Sender<RealtimeEvent>,
     file_change_rx: &mut mpsc::Receiver<FileChange>,
     shutdown_rx: oneshot::Receiver<()>,
+    mut on_outbound_event: impl FnMut(&RealtimeEvent),
 ) -> Result<()> {
     tokio::pin!(shutdown_rx);
     let mut interval = time::interval(Duration::from_millis(25));
@@ -149,6 +160,7 @@ pub async fn run_agent_loop<R: SessionProcessRunner>(
                     inbound_rx,
                     outbound_tx,
                     file_change_rx,
+                    &mut on_outbound_event,
                 ).await? {}
             }
         }

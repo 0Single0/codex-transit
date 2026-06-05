@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, Result};
 use serde_json::Value;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     process::{Child, Command},
     sync::mpsc,
 };
@@ -109,9 +109,14 @@ impl CodexAdapter {
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
         let prompt = augment_prompt_with_file_attachments(prompt, &options.file_attachments);
+        let prompt_via_stdin = requires_stdin_prompt(&options);
         let mut exec = self.build_exec_command(working_dir.clone(), options);
-        exec.args.push(prompt);
-        self.spawn_command(session_id, working_dir, exec, output_tx)
+        if prompt_via_stdin {
+            exec.args.push("-".to_string());
+        } else {
+            exec.args.push(prompt.clone());
+        }
+        self.spawn_command(session_id, working_dir, exec, output_tx, if prompt_via_stdin { Some(prompt) } else { None })
             .await
     }
 
@@ -125,9 +130,14 @@ impl CodexAdapter {
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
         let prompt = augment_prompt_with_file_attachments(prompt, &options.file_attachments);
+        let prompt_via_stdin = requires_stdin_prompt(&options);
         let mut exec = self.build_resume_command(working_dir.clone(), &codex_session_id, options);
-        exec.args.push(prompt);
-        self.spawn_command(session_id, working_dir, exec, output_tx)
+        if prompt_via_stdin {
+            exec.args.push("-".to_string());
+        } else {
+            exec.args.push(prompt.clone());
+        }
+        self.spawn_command(session_id, working_dir, exec, output_tx, if prompt_via_stdin { Some(prompt) } else { None })
             .await
     }
 
@@ -137,10 +147,11 @@ impl CodexAdapter {
         working_dir: PathBuf,
         exec: CodexExecCommand,
         output_tx: mpsc::Sender<ProcessOutput>,
+        prompt_stdin: Option<String>,
     ) -> Result<CodexSessionProcess> {
         if cfg!(windows) && env::var("CODEX_TRANSIT_OPEN_CODEX_WINDOW").unwrap_or_else(|_| "1".to_string()) != "0" {
             return self
-                .spawn_windows_visible_codex(session_id, working_dir, exec, output_tx)
+                .spawn_windows_visible_codex(session_id, working_dir, exec, output_tx, prompt_stdin)
                 .await;
         }
 
@@ -149,11 +160,19 @@ impl CodexAdapter {
         let mut child = Command::new(&invocation.program)
             .args(&invocation.args)
             .current_dir(working_dir)
-            .stdin(std::process::Stdio::null())
+            .stdin(if prompt_stdin.is_some() { std::process::Stdio::piped() } else { std::process::Stdio::null() })
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
             .with_context(|| format_spawn_error(&invocation))?;
+        if let Some(prompt_stdin) = prompt_stdin {
+            if let Some(mut stdin) = child.stdin.take() {
+                tokio::spawn(async move {
+                    let _ = stdin.write_all(prompt_stdin.as_bytes()).await;
+                    let _ = stdin.shutdown().await;
+                });
+            }
+        }
         if let Some(stdout) = child.stdout.take() {
             let tx = output_tx.clone();
             tokio::spawn(async move {
@@ -174,6 +193,7 @@ impl CodexAdapter {
         working_dir: PathBuf,
         exec: CodexExecCommand,
         output_tx: mpsc::Sender<ProcessOutput>,
+        prompt_stdin: Option<String>,
     ) -> Result<CodexSessionProcess> {
         static START_MARKER: OnceLock<String> = OnceLock::new();
         let marker = START_MARKER.get_or_init(|| {
@@ -210,11 +230,19 @@ if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
             .arg("-Command")
             .arg(script)
             .current_dir(normalized_working_dir)
-            .stdin(std::process::Stdio::null())
+            .stdin(if prompt_stdin.is_some() { std::process::Stdio::piped() } else { std::process::Stdio::null() })
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
             .with_context(|| format_spawn_error(&invocation))?;
+        if let Some(prompt_stdin) = prompt_stdin {
+            if let Some(mut stdin) = child.stdin.take() {
+                tokio::spawn(async move {
+                    let _ = stdin.write_all(prompt_stdin.as_bytes()).await;
+                    let _ = stdin.shutdown().await;
+                });
+            }
+        }
 
         if let Some(stdout) = child.stdout.take() {
             let marker = marker.clone();
@@ -237,6 +265,7 @@ if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
         _working_dir: PathBuf,
         _exec: CodexExecCommand,
         _output_tx: mpsc::Sender<ProcessOutput>,
+        _prompt_stdin: Option<String>,
     ) -> Result<CodexSessionProcess> {
         unreachable!()
     }
@@ -318,6 +347,10 @@ fn augment_prompt_with_file_attachments(
     suffix.push_str("Use these files from the provided local paths when relevant.");
 
     format!("{prompt}{suffix}")
+}
+
+fn requires_stdin_prompt(options: &CodexExecOptions) -> bool {
+    !options.image_attachments.is_empty()
 }
 
 pub fn default_codex_command() -> String {

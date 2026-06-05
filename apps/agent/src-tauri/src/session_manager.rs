@@ -215,6 +215,38 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         }
     }
 
+    pub async fn emit_turn_failed_for_event(
+        &mut self,
+        event: &RealtimeEvent,
+        message: String,
+    ) -> Result<()> {
+        let RealtimeEvent::SessionInput {
+            user_id,
+            device_id,
+            project_id,
+            session_id,
+            codex_session_id,
+            ..
+        } = event else {
+            return Ok(());
+        };
+
+        self.outbound_tx
+            .send(RealtimeEvent::CodexTurnFailed {
+                event_id: Uuid::new_v4(),
+                timestamp: "1970-01-01T00:00:00.000Z".to_string(),
+                user_id: *user_id,
+                device_id: *device_id,
+                project_id: *project_id,
+                session_id: *session_id,
+                codex_session_id: codex_session_id.clone(),
+                message,
+                turn_id: None,
+            })
+            .await?;
+        Ok(())
+    }
+
     pub async fn start_session(&mut self, session_id: Uuid, project_id: Uuid) -> Result<()> {
         self.start_session_with_context(
             session_id,
