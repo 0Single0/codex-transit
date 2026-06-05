@@ -128,13 +128,15 @@ export function SessionConsoleContainer(props: {
   }, []);
 
   useEffect(() => {
-    const viewport = scrollViewportRef.current;
-    if (!viewport) return;
-
     function handleScroll() {
+      const viewport = scrollViewportRef.current;
+      if (!viewport) return;
       const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       shouldStickToBottomRef.current = distanceFromBottom < 48;
     }
+
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
 
     handleScroll();
     viewport.addEventListener("scroll", handleScroll, { passive: true });
@@ -371,7 +373,6 @@ export function SessionConsoleContainer(props: {
       `}</style>
 
       <input
-        accept="image/*"
         className="hidden"
         multiple
         onChange={(event) => {

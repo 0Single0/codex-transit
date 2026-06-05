@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::{
     attachment_store::materialize_attachment,
     codex_adapter::{
-        format_error_chain, CodexAdapter, CodexExecOptions, CodexSessionProcess, OutputStream,
-        ProcessOutput, CODEX_THREAD_ID_PREFIX, CODEX_TOOL_CALL_PREFIX, CODEX_TURN_COMPLETED_PREFIX,
-        CODEX_TURN_FAILED_PREFIX,
+        format_error_chain, CodexAdapter, CodexExecOptions, CodexFileAttachment,
+        CodexSessionProcess, OutputStream, ProcessOutput, CODEX_THREAD_ID_PREFIX,
+        CODEX_TOOL_CALL_PREFIX, CODEX_TURN_COMPLETED_PREFIX, CODEX_TURN_FAILED_PREFIX,
     },
     codex_history::{list_codex_history, load_codex_history_messages, CodexHistoryListOptions},
     provider_models::fetch_provider_models,
@@ -157,7 +157,7 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
                         model,
                         approval_policy,
                         plan_mode: plan_mode.unwrap_or(false),
-                        attachments: self.materialize_attachments(attachments.unwrap_or_default()).await?,
+                        ..self.materialize_attachments(attachments.unwrap_or_default()).await?
                     },
                 )
                 .await
@@ -597,16 +597,27 @@ impl<R: SessionProcessRunner, D: ProjectDiffProvider> SessionManager<R, D> {
         Ok(())
     }
 
-    async fn materialize_attachments(&self, attachments: Vec<SessionAttachment>) -> Result<Vec<String>> {
-        let mut materialized = Vec::new();
+    async fn materialize_attachments(&self, attachments: Vec<SessionAttachment>) -> Result<CodexExecOptions> {
+        let mut image_attachments = Vec::new();
+        let mut file_attachments = Vec::new();
         for attachment in attachments {
-            if attachment.kind != "image" {
-                continue;
-            }
             let path = materialize_attachment(&attachment.path, &attachment.name).await?;
-            materialized.push(path.to_string_lossy().to_string());
+            let normalized_path = path.to_string_lossy().to_string();
+            if attachment.kind == "image" {
+                image_attachments.push(normalized_path);
+            } else {
+                file_attachments.push(CodexFileAttachment {
+                    name: attachment.name,
+                    path: normalized_path,
+                    mime_type: attachment.mime_type,
+                });
+            }
         }
-        Ok(materialized)
+        Ok(CodexExecOptions {
+            image_attachments,
+            file_attachments,
+            ..CodexExecOptions::default()
+        })
     }
 
     fn output_to_event(&mut self, output: ProcessOutput) -> Result<RealtimeEvent> {

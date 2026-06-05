@@ -47,7 +47,15 @@ pub struct CodexExecOptions {
     pub model: Option<String>,
     pub approval_policy: Option<String>,
     pub plan_mode: bool,
-    pub attachments: Vec<String>,
+    pub image_attachments: Vec<String>,
+    pub file_attachments: Vec<CodexFileAttachment>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodexFileAttachment {
+    pub name: String,
+    pub path: String,
+    pub mime_type: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,6 +108,7 @@ impl CodexAdapter {
         options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
+        let prompt = augment_prompt_with_file_attachments(prompt, &options.file_attachments);
         let mut exec = self.build_exec_command(working_dir.clone(), options);
         exec.args.push(prompt);
         self.spawn_command(session_id, working_dir, exec, output_tx)
@@ -115,6 +124,7 @@ impl CodexAdapter {
         options: CodexExecOptions,
         output_tx: mpsc::Sender<ProcessOutput>,
     ) -> Result<CodexSessionProcess> {
+        let prompt = augment_prompt_with_file_attachments(prompt, &options.file_attachments);
         let mut exec = self.build_resume_command(working_dir.clone(), &codex_session_id, options);
         exec.args.push(prompt);
         self.spawn_command(session_id, working_dir, exec, output_tx)
@@ -266,7 +276,7 @@ fn build_codex_exec_command(
             _ => {}
         }
     }
-    for attachment in options.attachments {
+    for attachment in options.image_attachments {
         args.push("--image".to_string());
         args.push(attachment);
     }
@@ -282,6 +292,32 @@ fn build_codex_exec_command(
         ]);
     }
     CodexExecCommand { program, args }
+}
+
+fn augment_prompt_with_file_attachments(
+    prompt: String,
+    attachments: &[CodexFileAttachment],
+) -> String {
+    if attachments.is_empty() {
+        return prompt;
+    }
+
+    let mut suffix = String::from("\n\nAttached files available on disk:\n");
+    for attachment in attachments {
+        suffix.push_str("- ");
+        suffix.push_str(&attachment.name);
+        if let Some(mime_type) = &attachment.mime_type {
+            suffix.push_str(" [");
+            suffix.push_str(mime_type);
+            suffix.push(']');
+        }
+        suffix.push_str("\n  path: ");
+        suffix.push_str(&attachment.path);
+        suffix.push('\n');
+    }
+    suffix.push_str("Use these files from the provided local paths when relevant.");
+
+    format!("{prompt}{suffix}")
 }
 
 pub fn default_codex_command() -> String {

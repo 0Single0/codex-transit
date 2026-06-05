@@ -60,7 +60,21 @@ export function historyMessagesToConversation(messages: CodexHistoryMessage[]): 
           id: message.id,
           kind: "message" as const,
           role: "user" as const,
-          text: message.text
+          text: message.text,
+          ...(message.attachments?.length
+            ? {
+                attachments: message.attachments.map((attachment, index) => ({
+                  id: `${message.id}-attachment-${index}`,
+                  name: attachment.name,
+                  path: attachment.path,
+                  ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+                  kind: attachment.kind,
+                  ...(attachment.kind === "image" && /^https?:\/\//.test(attachment.path)
+                    ? { previewUrl: attachment.path }
+                    : {})
+                }))
+              }
+            : {})
         }
       : {
           id: message.id,

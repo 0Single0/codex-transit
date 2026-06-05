@@ -144,7 +144,13 @@ export const codexHistoryMessageSchema = z.object({
   id: z.string().min(1),
   role: z.enum(["user", "assistant"]),
   text: z.string().min(1),
-  createdAt: z.string().datetime().optional()
+  createdAt: z.string().datetime().optional(),
+  attachments: z.array(z.object({
+    name: z.string().min(1),
+    path: z.string().min(1),
+    mimeType: z.string().min(1).optional(),
+    kind: z.enum(["image", "file"])
+  })).optional()
 });
 
 export const codexHistoryRequestSchema = baseEventSchema.extend({

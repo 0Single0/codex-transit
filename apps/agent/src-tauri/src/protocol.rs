@@ -23,6 +23,16 @@ pub struct SessionAttachment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexHistoryAttachment {
+    pub name: String,
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RealtimeEvent {
     #[serde(rename = "device.models.request", rename_all = "camelCase")]
@@ -246,4 +256,6 @@ pub struct CodexHistoryMessage {
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<CodexHistoryAttachment>>,
 }

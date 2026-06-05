@@ -2,11 +2,12 @@ import type { AttachmentItem } from "../conversationItems";
 
 export function AttachmentPreview(props: { attachment: AttachmentItem }) {
   const { attachment } = props;
+  const imageSource = attachment.previewUrl ?? (attachment.kind === "image" && isRemoteUrl(attachment.path) ? attachment.path : null);
 
-  if (attachment.kind === "image" && attachment.previewUrl) {
+  if (attachment.kind === "image" && imageSource) {
     return (
       <figure className="overflow-hidden rounded-[22px] bg-white shadow-[0_12px_30px_rgba(148,163,184,0.14)] ring-1 ring-slate-200/70">
-        <img alt={attachment.name} className="max-h-56 w-full object-cover" src={attachment.previewUrl} />
+        <img alt={attachment.name} className="max-h-56 w-full object-cover" src={imageSource} />
         <figcaption className="px-3 py-2.5 text-xs text-slate-500">{attachment.name}</figcaption>
       </figure>
     );
@@ -23,4 +24,8 @@ export function AttachmentPreview(props: { attachment: AttachmentItem }) {
       </div>
     </div>
   );
+}
+
+function isRemoteUrl(value: string) {
+  return /^https?:\/\//i.test(value);
 }

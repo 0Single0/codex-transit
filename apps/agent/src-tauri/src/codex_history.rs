@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::protocol::{CodexHistoryItem, CodexHistoryMessage};
+use crate::protocol::{CodexHistoryAttachment, CodexHistoryItem, CodexHistoryMessage};
 
 pub struct CodexHistoryListOptions {
     pub limit: usize,
@@ -120,9 +120,11 @@ pub fn load_codex_history_messages_from_home(
         let Some(message) = payload.get("message").and_then(Value::as_str) else {
             continue;
         };
-        if message.trim().is_empty() {
+        let (cleaned_message, mut attachments) = extract_embedded_file_attachments(message);
+        if cleaned_message.trim().is_empty() {
             continue;
         }
+        attachments.extend(parse_history_attachments(payload));
         messages.push(CodexHistoryMessage {
             id: format!("{codex_session_id}-{index}"),
             role: if kind == "user_message" {
@@ -130,11 +132,135 @@ pub fn load_codex_history_messages_from_home(
             } else {
                 "assistant".to_string()
             },
-            text: message.to_string(),
+            text: cleaned_message,
             created_at: timestamp,
+            attachments: (!attachments.is_empty()).then_some(attachments),
         });
     }
     Ok(messages)
+}
+
+fn parse_history_attachments(payload: &Value) -> Vec<CodexHistoryAttachment> {
+    let mut attachments = Vec::new();
+
+    if let Some(local_images) = payload.get("local_images").and_then(Value::as_array) {
+        for (index, image) in local_images.iter().enumerate() {
+            let Some(path) = image.as_str() else {
+                continue;
+            };
+            let name = Path::new(path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("image-{}", index + 1));
+            attachments.push(CodexHistoryAttachment {
+                name,
+                path: path.to_string(),
+                mime_type: guess_mime_type(path),
+                kind: "image".to_string(),
+            });
+        }
+    }
+
+    if let Some(images) = payload.get("images").and_then(Value::as_array) {
+        for (index, image) in images.iter().enumerate() {
+            let Some(path) = image.as_str() else {
+                continue;
+            };
+            let name = Path::new(path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("image-{}", attachments.len() + index + 1));
+            attachments.push(CodexHistoryAttachment {
+                name,
+                path: path.to_string(),
+                mime_type: guess_mime_type(path),
+                kind: "image".to_string(),
+            });
+        }
+    }
+
+    attachments
+}
+
+fn extract_embedded_file_attachments(message: &str) -> (String, Vec<CodexHistoryAttachment>) {
+    const HEADER: &str = "\n\nAttached files available on disk:\n";
+    const FOOTER: &str = "Use these files from the provided local paths when relevant.";
+
+    let Some(header_index) = message.find(HEADER) else {
+        return (message.to_string(), Vec::new());
+    };
+
+    let body_start = header_index + HEADER.len();
+    let Some(footer_index) = message[body_start..].find(FOOTER).map(|index| body_start + index) else {
+        return (message.to_string(), Vec::new());
+    };
+
+    let prefix = message[..header_index].trim_end().to_string();
+    let body = &message[body_start..footer_index];
+    let mut attachments = Vec::new();
+    let mut lines = body.lines().peekable();
+
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("- ") {
+            continue;
+        }
+
+        let name_part = trimmed.trim_start_matches("- ").trim();
+        let (name, mime_type) = parse_name_and_mime(name_part);
+        let Some(path_line) = lines.next() else {
+            continue;
+        };
+        let path_trimmed = path_line.trim();
+        let Some(path) = path_trimmed.strip_prefix("path: ").map(str::trim) else {
+            continue;
+        };
+
+        attachments.push(CodexHistoryAttachment {
+            name,
+            path: path.to_string(),
+            mime_type,
+            kind: "file".to_string(),
+        });
+    }
+
+    (prefix, attachments)
+}
+
+fn parse_name_and_mime(value: &str) -> (String, Option<String>) {
+    let Some(open_index) = value.rfind(" [") else {
+        return (value.to_string(), None);
+    };
+    if !value.ends_with(']') {
+        return (value.to_string(), None);
+    }
+
+    let name = value[..open_index].trim().to_string();
+    let mime_type = value[(open_index + 2)..(value.len() - 1)].trim().to_string();
+    if name.is_empty() || mime_type.is_empty() {
+        return (value.to_string(), None);
+    }
+
+    (name, Some(mime_type))
+}
+
+fn guess_mime_type(path: &str) -> Option<String> {
+    let extension = Path::new(path)
+        .extension()
+        .and_then(|value| value.to_str())?
+        .to_ascii_lowercase();
+    let mime_type = match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        _ => return None,
+    };
+    Some(mime_type.to_string())
 }
 
 fn find_session_file(codex_home: &Path, codex_session_id: &str) -> Result<Option<PathBuf>> {
