@@ -1,29 +1,37 @@
-import QRCode from "qrcode";
-import { FormEvent, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import QRCode from "qrcode";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  AgentDeviceOverview,
-  AgentLoginPairing,
-  AgentRuntimeStatus,
-  AgentSettings,
-  ProjectEntry,
+  type AgentDeviceOverview,
+  type AgentLoginPairing,
+  type AgentRuntimeStatus,
+  type AgentSettings,
+  type ProjectEntry,
   createAgentApi
 } from "./agentApi";
+import { getMessages } from "./messages";
 import { LoginView } from "./views/LoginView";
 import { MainView } from "./views/MainView";
 import { ProjectsView } from "./views/ProjectsView";
 import { SettingsView } from "./views/SettingsView";
 import { TrayMenuView } from "./views/TrayMenuView";
-import { defaultPreferences, Preferences, SettingsSection, Surface, surfaceSizes } from "./uiTypes";
-import { getCurrentWindowLabel, hideWindow, minimizeWindow, resizeWindowIfRestored, toggleMaximizeWindow } from "./windowActions";
+import { defaultPreferences, type Preferences, type SettingsSection, type Surface } from "./uiTypes";
+import { getCurrentWindowLabel, hideWindow, minimizeWindow, toggleMaximizeWindow } from "./windowActions";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 const defaultDevice: AgentDeviceOverview = {
-  name: "正在读取设备名称",
+  name: "Loading device name",
   platform: "unknown",
-  osLabel: "正在读取系统信息",
+  osLabel: "Loading system information",
   version: "-"
+};
+
+const defaultRuntime: AgentRuntimeStatus = {
+  running: false,
+  connected: false,
+  lastError: null,
+  recentCommands: []
 };
 
 export function App() {
@@ -34,7 +42,7 @@ export function App() {
   const [settings, setSettings] = useState<AgentSettings | null>(null);
   const [device, setDevice] = useState<AgentDeviceOverview>(defaultDevice);
   const [deviceName, setDeviceName] = useState(defaultDevice.name);
-  const [runtime, setRuntime] = useState<AgentRuntimeStatus>({ running: false, connected: false, lastError: null });
+  const [runtime, setRuntime] = useState<AgentRuntimeStatus>(defaultRuntime);
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [preferences, setPreferences] = useState<Preferences>(() => loadPreferences());
   const [email, setEmail] = useState("user@example.com");
@@ -43,11 +51,18 @@ export function App() {
   const [loginPairing, setLoginPairing] = useState<AgentLoginPairing | null>(null);
   const [loginQr, setLoginQr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("请先登录并绑定本机设备");
+  const [message, setMessage] = useState("Sign in first, then bind this desktop Agent to your account.");
   const [error, setError] = useState<string | null>(null);
+  const labels = useMemo(() => getMessages(preferences.locale), [preferences.locale]);
 
   const configured = Boolean(settings?.deviceId && settings?.deviceToken);
-  const connectionLabel = runtime.connected ? "已连接" : runtime.running ? "连接中" : configured ? "已绑定，未连接" : "未连接";
+  const connectionLabel = runtime.connected
+    ? labels.connected
+    : runtime.running
+      ? labels.connecting
+      : configured
+        ? labels.boundToAccount
+        : labels.signInForMobile;
   const statusTone = runtime.connected ? "online" : runtime.running ? "idle" : "offline";
   const visibleProjects = orderProjects(projects, preferences.defaultProjectId);
 
@@ -68,6 +83,7 @@ export function App() {
       setSettingsSection(section);
       setSurface("settings");
     });
+
     return () => {
       void unlistenTray.then((unlisten) => unlisten?.());
       void unlistenMain.then((unlisten) => unlisten?.());
@@ -76,17 +92,12 @@ export function App() {
   }, [configured, isTrayPopover]);
 
   useEffect(() => {
-    if (isTrayPopover) return;
-    const [width, height] = surfaceSizes[surface];
-    void resizeWindowIfRestored(width, height);
-  }, [isTrayPopover, surface]);
-
-  useEffect(() => {
     localStorage.setItem("agent-ui-preferences", JSON.stringify(preferences));
   }, [preferences]);
 
   useEffect(() => {
     if (!configured) return;
+
     const refreshRuntimeStatus = async () => {
       try {
         setRuntime(await api.getRuntimeStatus());
@@ -94,6 +105,7 @@ export function App() {
         return;
       }
     };
+
     void refreshRuntimeStatus();
     const interval = window.setInterval(() => void refreshRuntimeStatus(), 1800);
     return () => window.clearInterval(interval);
@@ -103,7 +115,7 @@ export function App() {
     if (!loginPairing || configured) return;
     const interval = window.setInterval(() => void pollLoginPairing(loginPairing.pairingToken), 1800);
     return () => window.clearInterval(interval);
-  }, [loginPairing?.pairingToken, configured]);
+  }, [configured, loginPairing]);
 
   async function loadInitialState() {
     setBusy(true);
@@ -158,9 +170,9 @@ export function App() {
       });
       await applyAgentSettings(nextDevice.deviceId, nextDevice.token);
       setSurface("main");
-      setMessage("登录成功，设备已绑定到你的账号");
+      setMessage("Signed in successfully. This desktop Agent is now bound to your account.");
     } catch {
-      setError("登录失败，请检查账号、密码或服务器连接");
+      setError("Login failed. Check your account, password, or server connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -172,13 +184,30 @@ export function App() {
     try {
       const pairing = await api.createLoginPairing({ name: deviceName, platform: detectPlatform() });
       setLoginPairing(pairing);
-      setLoginQr(await QRCode.toDataURL(JSON.stringify(pairing.payload), { errorCorrectionLevel: "M", margin: 1, width: 220 }));
-      setMessage("登录二维码已生成，等待手机端确认");
+      setLoginQr(
+        await QRCode.toDataURL(JSON.stringify(pairing.payload), {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 220
+        })
+      );
+      setMessage("Login QR created. Waiting for confirmation from the mobile app.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function toggleLoginMode() {
+    if (loginQr || loginPairing) {
+      setLoginPairing(null);
+      setLoginQr(null);
+      setError(null);
+      return;
+    }
+
+    await createQrLogin();
   }
 
   async function pollLoginPairing(pairingToken: string) {
@@ -188,14 +217,15 @@ export function App() {
       if (status.status === "expired") {
         setLoginPairing(null);
         setLoginQr(null);
-        setError("登录二维码已过期，请重新生成");
+        setError("This login QR has expired. Generate a new one to continue.");
         return;
       }
+
       await applyAgentSettings(status.deviceId, status.token);
       setLoginPairing(null);
       setLoginQr(null);
       setSurface("main");
-      setMessage("手机端确认成功，正在连接中转服务器");
+      setMessage("Mobile confirmation received. Connecting the desktop Agent to the relay server.");
     } catch {
       return;
     }
@@ -216,6 +246,7 @@ export function App() {
     try {
       const selectedPath = await api.chooseProjectDirectory();
       if (!selectedPath) return;
+
       const project = await api.addProject(selectedPath);
       setProjects((current) => [project, ...current.filter((item) => item.project_id !== project.project_id)]);
       setPreferences((current) => ({
@@ -225,7 +256,7 @@ export function App() {
       await api.syncProjectsNow().catch(() => undefined);
       if (runtime.running) await api.stopRuntime();
       await ensureRuntime();
-      setMessage("项目目录已添加并同步");
+      setMessage("Project folder added and synced.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -244,7 +275,7 @@ export function App() {
         defaultProjectId: current.defaultProjectId === projectId ? null : current.defaultProjectId
       }));
       await api.syncProjectsNow().catch(() => undefined);
-      setMessage("项目目录已移除");
+      setMessage("Project folder removed.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -258,7 +289,13 @@ export function App() {
     try {
       const status = runtime.running ? await api.stopRuntime() : await ensureRuntime();
       setRuntime(status);
-      setMessage(status.connected ? "中转服务器已确认连接" : status.running ? "运行时已启动，等待服务器确认" : "运行时已暂停");
+      setMessage(
+        status.connected
+          ? "Relay server confirmed the connection."
+          : status.running
+            ? "Runtime started and is waiting for server confirmation."
+            : "Runtime paused."
+      );
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -272,9 +309,9 @@ export function App() {
     try {
       await api.clearSettings();
       setSettings(null);
-      setRuntime({ running: false, connected: false, lastError: null });
+      setRuntime(defaultRuntime);
       setSurface("login");
-      setMessage("已退出并清除本机绑定");
+      setMessage("Logged out and cleared the local device binding.");
     } catch (caught) {
       setError(toErrorMessage(caught));
     } finally {
@@ -305,20 +342,20 @@ export function App() {
   }
 
   return (
-    <main className={`agent-root surface-${surface}`} aria-label="Codex Agent">
+    <main aria-label="Codex Agent" className={`agent-root surface-${surface}`}>
       {surface === "login" ? (
         <LoginView
           busy={busy}
           email={email}
           error={error}
           loginQr={loginQr}
+          labels={labels}
           password={password}
           showPassword={showPassword}
           onClose={hideWindow}
           onEmailChange={setEmail}
           onPasswordChange={setPassword}
-          onQrLogin={createQrLogin}
-          onServerSettings={() => openSettings("connection")}
+          onQrLogin={() => void toggleLoginMode()}
           onSubmit={accountLogin}
           onTogglePassword={() => setShowPassword((value) => !value)}
         />
@@ -331,6 +368,7 @@ export function App() {
           connectionLabel={connectionLabel}
           defaultProjectId={preferences.defaultProjectId}
           device={device}
+          labels={labels}
           projects={visibleProjects}
           runtimeConnected={runtime.connected}
           runtimeRunning={runtime.running}
@@ -350,9 +388,10 @@ export function App() {
           configured={configured}
           connectionLabel={connectionLabel}
           device={device}
+          labels={labels}
           runtimeConnected={runtime.connected}
           onExit={exitApplication}
-          onOpenLog={() => openSettingsFromTray("connection")}
+          onOpenLog={() => openSettingsFromTray("logs")}
           onOpenMain={openMainFromTray}
           onOpenSettings={() => openSettingsFromTray("general")}
         />
@@ -363,10 +402,9 @@ export function App() {
           activeSection={settingsSection}
           busy={busy}
           error={error}
-          message={message}
+          labels={labels}
           preferences={preferences}
           runtime={runtime}
-          settings={settings}
           onBack={() => setSurface(configured ? "main" : "login")}
           onClose={hideWindow}
           onPreferenceChange={updatePreference}
@@ -379,6 +417,7 @@ export function App() {
         <ProjectsView
           busy={busy}
           defaultProjectId={preferences.defaultProjectId}
+          labels={labels}
           projects={visibleProjects}
           onAddProject={addProjectFromPicker}
           onBack={() => setSurface("settings")}
@@ -415,9 +454,9 @@ function orderProjects(projects: ProjectEntry[], defaultProjectId: string | null
 function inferDeviceOverview(): AgentDeviceOverview {
   const platform = detectPlatform();
   return {
-    name: "未知设备",
+    name: "Unknown device",
     platform,
-    osLabel: "未知系统信息",
+    osLabel: "Unknown system information",
     version: "-"
   };
 }
@@ -435,7 +474,7 @@ function detectPlatform(): "windows" | "macos" | "unknown" {
 }
 
 function isSettingsSection(value: string): value is SettingsSection {
-  return value === "general" || value === "connection" || value === "about";
+  return value === "general" || value === "logs" || value === "about";
 }
 
 async function safeListen<Payload = void>(event: string, handler: (payload: Payload) => void) {

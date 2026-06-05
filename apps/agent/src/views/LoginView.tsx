@@ -1,5 +1,6 @@
-import { Eye, Settings } from "lucide-react";
-import { FormEvent } from "react";
+import { Eye, QrCode } from "lucide-react";
+import { type FormEvent } from "react";
+import type { AgentMessages } from "../messages";
 import { AppLogo } from "../components/AppLogo";
 import { TitleBar } from "../components/TitleBar";
 
@@ -8,13 +9,13 @@ type LoginViewProps = {
   email: string;
   error: string | null;
   loginQr: string | null;
+  labels: AgentMessages;
   password: string;
   showPassword: boolean;
   onClose: () => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onQrLogin: () => void;
-  onServerSettings: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTogglePassword: () => void;
 };
@@ -24,58 +25,79 @@ export function LoginView({
   email,
   error,
   loginQr,
+  labels,
   password,
   showPassword,
   onClose,
   onEmailChange,
   onPasswordChange,
   onQrLogin,
-  onServerSettings,
   onSubmit,
   onTogglePassword
 }: LoginViewProps) {
+  const qrMode = Boolean(loginQr);
+
   return (
     <section className="window login-window">
-      <TitleBar closeOnly title="Codex Agent" onClose={onClose} />
+      <TitleBar closeOnly labels={labels} title={labels.appName} onClose={onClose} />
       <div className="login-body">
         <AppLogo size="large" />
-        <h1>Codex Agent</h1>
-        <p>连接服务器，随时随地使用 Codex</p>
-        <form className="login-form" onSubmit={onSubmit}>
-          <input aria-label="邮箱" value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="user@example.com" type="email" />
-          <div className="password-field">
-            <input
-              aria-label="密码"
-              value={password}
-              onChange={(event) => onPasswordChange(event.target.value)}
-              placeholder="请输入密码"
-              type={showPassword ? "text" : "password"}
-            />
-            <button aria-label="显示或隐藏密码" onClick={onTogglePassword} type="button">
-              <Eye />
+        <h1>{labels.appName}</h1>
+        <p>{qrMode ? labels.loginQrIntro : labels.loginIntro}</p>
+        <div className="login-mode-shell">
+          {qrMode ? (
+            <div className="qr-login-panel">
+              <img alt="Desktop login QR" src={loginQr ?? undefined} />
+            </div>
+          ) : (
+            <form className="login-form" onSubmit={onSubmit}>
+              <input
+                aria-label="email"
+                onChange={(event) => onEmailChange(event.target.value)}
+                placeholder={labels.emailPlaceholder}
+                type="email"
+                value={email}
+              />
+              <div className="password-field">
+                <input
+                  aria-label="password"
+                  onChange={(event) => onPasswordChange(event.target.value)}
+                  placeholder={labels.passwordPlaceholder}
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                />
+                <button aria-label="toggle password visibility" onClick={onTogglePassword} type="button">
+                  <Eye />
+                </button>
+              </div>
+              <button className="primary-button" disabled={busy || !email || !password} type="submit">
+                {labels.logIn}
+              </button>
+            </form>
+          )}
+        </div>
+        {qrMode ? (
+          <p className="register-line">
+            {labels.preferAccount}
+            <button onClick={onQrLogin} type="button">
+              {labels.switchToAccount}
             </button>
-          </div>
-          <button className="primary-button" disabled={busy || !email || !password} type="submit">
-            登录
-          </button>
-        </form>
-        <p className="register-line">
-          还没有账号？
-          <button type="button" onClick={onQrLogin}>
-            注册
-          </button>
-        </p>
-        {loginQr ? (
-          <div className="qr-popover">
-            <img alt="登录二维码" src={loginQr} />
-            <span>手机端扫码确认</span>
-          </div>
-        ) : null}
+          </p>
+        ) : (
+          <p className="register-line">
+            {labels.wantPhoneLogin}
+            <button onClick={onQrLogin} type="button">
+              {labels.switchToQr}
+            </button>
+          </p>
+        )}
         {error ? <p className="form-message error">{error}</p> : null}
-        <button className="server-button" type="button" onClick={onServerSettings}>
-          <Settings />
-          服务器设置
-        </button>
+        {busy && qrMode ? (
+          <p className="note login-note">
+            <QrCode />
+            {labels.generatingQr}
+          </p>
+        ) : null}
       </div>
     </section>
   );

@@ -1,10 +1,12 @@
 export type Surface = "login" | "main" | "tray" | "settings" | "projects";
 
-export type SettingsSection = "general" | "connection" | "about";
+export type SettingsSection = "general" | "logs" | "about";
 
 export type ThemePreference = "system" | "light" | "dark";
 
 export type LogLevel = "info" | "debug" | "warn" | "error";
+
+export type LocalePreference = "en" | "zh";
 
 export type Preferences = {
   autostart: boolean;
@@ -12,6 +14,7 @@ export type Preferences = {
   autoUpdate: boolean;
   theme: ThemePreference;
   logLevel: LogLevel;
+  locale: LocalePreference;
   defaultProjectId: string | null;
 };
 
@@ -21,6 +24,7 @@ export const defaultPreferences: Preferences = {
   autoUpdate: true,
   theme: "system",
   logLevel: "info",
+  locale: "zh",
   defaultProjectId: null
 };
 

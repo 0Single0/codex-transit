@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { readPossiblyEncryptedBody } from "../../lib/transportCrypto";
 import { requireUser } from "../../plugins/auth";
 import { connectionRegistry } from "../realtime/realtime.gateway";
 import {
@@ -82,7 +83,7 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
 
   app.post("/devices/agent-login/claim", async (request, reply) => {
     const user = await requireUser(request);
-    const body = z.object({ pairingToken: z.string().min(16) }).parse(request.body);
+    const body = z.object({ pairingToken: z.string().min(16) }).parse(readPossiblyEncryptedBody(request.body));
     const tokenHash = hashSecret(body.pairingToken);
     const pairing = await app.prisma.agentLoginPairing.findUnique({ where: { tokenHash } });
     if (!pairing || pairing.claimedAt || pairing.expiresAt.getTime() < Date.now()) {

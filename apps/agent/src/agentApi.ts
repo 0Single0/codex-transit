@@ -1,4 +1,5 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { maybeEncryptPayload } from "./transportCrypto";
 
 export type AgentSettings = {
   serverUrl: string;
@@ -18,6 +19,15 @@ export type AgentRuntimeStatus = {
   running: boolean;
   connected: boolean;
   lastError: string | null;
+  recentCommands: AgentCommandLogEntry[];
+};
+
+export type AgentCommandLogEntry = {
+  itemId: string;
+  command: string;
+  status: string;
+  output?: string | null;
+  exitCode?: number | null;
 };
 
 export type AgentDeviceOverview = {
@@ -95,7 +105,7 @@ export function createAgentApi(invoke: Invoke = tauriInvoke, fetcher: typeof fet
       return invoke<void>("open_main_window");
     },
 
-    openSettingsWindow(section: "general" | "connection" | "about") {
+    openSettingsWindow(section: "general" | "logs" | "about") {
       return invoke<void>("open_settings_window", { section });
     },
 
@@ -146,7 +156,7 @@ export function createAgentApi(invoke: Invoke = tauriInvoke, fetcher: typeof fet
     async login(email: string, password: string) {
       return request<{ token: string }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(maybeEncryptPayload({ email, password }))
       });
     },
 

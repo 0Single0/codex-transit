@@ -8,6 +8,10 @@ export function buildDevicesPath() {
   return "/devices";
 }
 
+export function buildScanAgentPath() {
+  return "/scan-agent";
+}
+
 export function buildDeviceProjectsPath(deviceId: string) {
   return `/devices/${deviceId}/projects`;
 }

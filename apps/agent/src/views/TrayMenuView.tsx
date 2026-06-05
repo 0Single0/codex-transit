@@ -1,5 +1,6 @@
 import { Home, LogOut, Settings, SquareMenu } from "lucide-react";
 import { AgentDeviceOverview } from "../agentApi";
+import type { AgentMessages } from "../messages";
 import { AppLogo } from "../components/AppLogo";
 import { DeviceCard } from "../components/DeviceCard";
 
@@ -7,6 +8,7 @@ type TrayMenuViewProps = {
   configured: boolean;
   connectionLabel: string;
   device: AgentDeviceOverview;
+  labels: AgentMessages;
   runtimeConnected: boolean;
   onExit: () => void;
   onOpenLog: () => void;
@@ -18,6 +20,7 @@ export function TrayMenuView({
   configured,
   connectionLabel,
   device,
+  labels,
   runtimeConnected,
   onExit,
   onOpenLog,
@@ -29,30 +32,30 @@ export function TrayMenuView({
       <div className="tray-head">
         <AppLogo />
         <div>
-          <h2>Codex Agent</h2>
+          <h2>{labels.appName}</h2>
           <p>
             <span className={`dot ${runtimeConnected ? "green" : "gray"}`} />
             {connectionLabel}
           </p>
         </div>
       </div>
-      <DeviceCard device={device} active={runtimeConnected} />
-      <nav className="tray-actions" aria-label="托盘菜单">
+      <DeviceCard active={runtimeConnected} device={device} labels={labels} />
+      <nav className="tray-actions" aria-label={labels.trayMenu}>
         <button onClick={onOpenMain} type="button">
           <Home />
-          打开主界面
+          {labels.openMainWindow}
         </button>
         <button onClick={onOpenLog} type="button">
           <SquareMenu />
-          查看日志
+          {labels.executionLogs}
         </button>
         <button onClick={onOpenSettings} type="button">
           <Settings />
-          设置
+          {labels.settings}
         </button>
         <button className="danger" disabled={!configured} onClick={onExit} type="button">
           <LogOut />
-          退出
+          {labels.exit}
         </button>
       </nav>
     </section>

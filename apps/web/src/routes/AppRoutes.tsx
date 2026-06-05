@@ -8,6 +8,7 @@ import { MePage } from "../pages/MePage";
 import { ProjectHistoryPage } from "../pages/ProjectHistoryPage";
 import { ProjectHomePage } from "../pages/ProjectHomePage";
 import { ProjectsPage } from "../pages/ProjectsPage";
+import { ScanAgentPage } from "../pages/ScanAgentPage";
 import { SessionPage } from "../pages/SessionPage";
 import { RequireAuth } from "./RequireAuth";
 
@@ -17,6 +18,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path={buildLoginPath()} element={<LoginPage />} />
+      <Route path="/scan-agent" element={<ScanAgentPage />} />
       <Route
         element={(
           <RequireAuth>

@@ -32,13 +32,13 @@ export function ConversationMessage(props: {
       ) : null}
       <div className={`flex ${user ? "justify-end mt-3" : "justify-start"}`}>
         <div
-          className={`rounded-[15px] px-3 py-3 whitespace-pre-wrap break-words font-sans text-[15px] leading-8 shadow-[0_10px_28px_rgba(148,163,184,0.08)] ${
+          className={`whitespace-pre-wrap break-words font-sans text-[15px] leading-8 ${
             user
-              ? "bg-[#ddebff] text-slate-900 ring-1 ring-[#c6daf8]"
-              : "bg-white text-slate-800 ring-1 ring-slate-200/85"
+              ? "rounded-[15px] bg-[#ddebff] px-3 py-3 text-slate-900 ring-1 ring-[#c6daf8]"
+              : "bg-transparent px-0 py-0 text-slate-800"
           }`}
           style={{
-            wordBreak:"break-all"
+            wordBreak: "break-all"
           }}
         >
           <MessageRichText text={item.text} tone={user ? "user" : "codex"} />

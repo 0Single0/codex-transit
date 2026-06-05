@@ -1,17 +1,18 @@
-import { Folder, Info, Settings } from "lucide-react";
-import { AgentRuntimeStatus, AgentSettings } from "../agentApi";
+import { Check, ChevronDown, Folder, Info, ScrollText, Settings } from "lucide-react";
+import { AgentCommandLogEntry, AgentRuntimeStatus } from "../agentApi";
+import type { AgentMessages } from "../messages";
 import { AppLogo } from "../components/AppLogo";
 import { TitleBar } from "../components/TitleBar";
-import { LogLevel, Preferences, SettingsSection, ThemePreference } from "../uiTypes";
+import { useEffect, useRef, useState } from "react";
+import { LocalePreference, LogLevel, Preferences, SettingsSection, ThemePreference } from "../uiTypes";
 
 type SettingsViewProps = {
   activeSection: SettingsSection;
   busy: boolean;
   error: string | null;
-  message: string;
+  labels: AgentMessages;
   preferences: Preferences;
   runtime: AgentRuntimeStatus;
-  settings: AgentSettings | null;
   onBack: () => void;
   onClose: () => void;
   onPreferenceChange: <Key extends keyof Preferences>(key: Key, value: Preferences[Key]) => void;
@@ -19,16 +20,13 @@ type SettingsViewProps = {
   onSectionChange: (section: SettingsSection) => void;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
-
 export function SettingsView({
   activeSection,
   busy,
   error,
-  message,
+  labels,
   preferences,
   runtime,
-  settings,
   onBack,
   onClose,
   onPreferenceChange,
@@ -37,15 +35,15 @@ export function SettingsView({
 }: SettingsViewProps) {
   return (
     <section className="window settings-window">
-      <TitleBar showBack settingsIcon title="设置" onBack={onBack} onClose={onClose} />
+      <TitleBar labels={labels} settingsIcon showBack title={labels.settings} onBack={onBack} onClose={onClose} />
       <div className="settings-layout">
-        <SettingsSidebar active={activeSection} onProjectSection={onProjectSection} onSelect={onSectionChange} />
-        {activeSection === "connection" ? (
-          <ConnectionPanel error={error} message={message} runtime={runtime} settings={settings} />
+        <SettingsSidebar active={activeSection} labels={labels} onProjectSection={onProjectSection} onSelect={onSectionChange} />
+        {activeSection === "logs" ? (
+          <LogPanel error={error} labels={labels} runtime={runtime} />
         ) : activeSection === "about" ? (
-          <AboutPanel />
+          <AboutPanel labels={labels} />
         ) : (
-          <GeneralPanel busy={busy} preferences={preferences} onClose={onBack} onPreferenceChange={onPreferenceChange} />
+          <GeneralPanel busy={busy} labels={labels} preferences={preferences} onPreferenceChange={onPreferenceChange} />
         )}
       </div>
     </section>
@@ -54,18 +52,20 @@ export function SettingsView({
 
 export function SettingsSidebar({
   active,
+  labels,
   onProjectSection,
   onSelect
 }: {
   active: SettingsSection | "projects";
+  labels: AgentMessages;
   onProjectSection: () => void;
   onSelect: (section: SettingsSection) => void;
 }) {
   const items = [
-    { key: "general" as const, label: "通用", icon: <Settings />, onClick: () => onSelect("general") },
-    { key: "projects" as const, label: "项目目录", icon: <Folder />, onClick: onProjectSection },
-    { key: "connection" as const, label: "连接", icon: <Settings />, onClick: () => onSelect("connection") },
-    { key: "about" as const, label: "关于", icon: <Info />, onClick: () => onSelect("about") }
+    { key: "general" as const, label: labels.general, icon: <Settings />, onClick: () => onSelect("general") },
+    { key: "projects" as const, label: labels.projects, icon: <Folder />, onClick: onProjectSection },
+    { key: "logs" as const, label: labels.logs, icon: <ScrollText />, onClick: () => onSelect("logs") },
+    { key: "about" as const, label: labels.about, icon: <Info />, onClick: () => onSelect("about") }
   ];
 
   return (
@@ -82,98 +82,167 @@ export function SettingsSidebar({
 
 function GeneralPanel({
   busy,
+  labels,
   preferences,
-  onClose,
   onPreferenceChange
 }: {
   busy: boolean;
+  labels: AgentMessages;
   preferences: Preferences;
-  onClose: () => void;
   onPreferenceChange: <Key extends keyof Preferences>(key: Key, value: Preferences[Key]) => void;
 }) {
   return (
     <div className="settings-content">
-      <h2>通用</h2>
+      <h2>{labels.general}</h2>
       <div className="switch-list">
-        <CheckboxRow checked={preferences.autostart} label="开机自启动" onChange={(value) => onPreferenceChange("autostart", value)} />
-        <CheckboxRow checked={preferences.minimizeToTray} label="最小化到系统托盘" onChange={(value) => onPreferenceChange("minimizeToTray", value)} />
-        <CheckboxRow checked={preferences.autoUpdate} label="有更新时自动检查" onChange={(value) => onPreferenceChange("autoUpdate", value)} />
+        <CheckboxRow checked={preferences.autostart} label={labels.launchOnStartup} onChange={(value) => onPreferenceChange("autostart", value)} />
+        <CheckboxRow checked={preferences.minimizeToTray} label={labels.minimizeToTray} onChange={(value) => onPreferenceChange("minimizeToTray", value)} />
+        <CheckboxRow checked={preferences.autoUpdate} label={labels.autoUpdate} onChange={(value) => onPreferenceChange("autoUpdate", value)} />
       </div>
-      <label className="select-row">
-        外观
-        <select value={preferences.theme} onChange={(event) => onPreferenceChange("theme", event.target.value as ThemePreference)}>
-          <option value="system">跟随系统</option>
-          <option value="light">浅色</option>
-          <option value="dark">深色</option>
-        </select>
-      </label>
-      <label className="select-row">
-        日志级别
-        <select value={preferences.logLevel} onChange={(event) => onPreferenceChange("logLevel", event.target.value as LogLevel)}>
-          <option value="info">信息</option>
-          <option value="debug">调试</option>
-          <option value="warn">警告</option>
-          <option value="error">错误</option>
-        </select>
-      </label>
-      <div className="form-actions">
-        <button className="ghost-button" disabled={busy} onClick={onClose} type="button">
-          取消
-        </button>
-        <button className="primary-small" disabled={busy} onClick={onClose} type="button">
-          保存
-        </button>
+      <div className="select-row">
+        <span>{labels.theme}</span>
+        <CustomSelect
+          options={[
+            { value: "system", label: labels.themeSystem },
+            { value: "light", label: labels.themeLight },
+            { value: "dark", label: labels.themeDark }
+          ]}
+          value={preferences.theme}
+          onChange={(value) => onPreferenceChange("theme", value as ThemePreference)}
+        />
+      </div>
+      <div className="select-row">
+        <span>{labels.logLevel}</span>
+        <CustomSelect
+          options={[
+            { value: "info", label: labels.info },
+            { value: "debug", label: labels.debug },
+            { value: "warn", label: labels.warn },
+            { value: "error", label: labels.error }
+          ]}
+          value={preferences.logLevel}
+          onChange={(value) => onPreferenceChange("logLevel", value as LogLevel)}
+        />
+      </div>
+      <div className="select-row">
+        <span>{labels.language}</span>
+        <p className="language-hint">{labels.languageHint}</p>
+        <CustomSelect
+          options={[
+            { value: "zh", label: labels.languageChinese },
+            { value: "en", label: labels.languageEnglish }
+          ]}
+          value={preferences.locale}
+          onChange={(value) => onPreferenceChange("locale", value as LocalePreference)}
+        />
       </div>
     </div>
   );
 }
 
-function ConnectionPanel({
+function LogPanel({
   error,
-  message,
-  runtime,
-  settings
+  labels,
+  runtime
 }: {
   error: string | null;
-  message: string;
+  labels: AgentMessages;
   runtime: AgentRuntimeStatus;
-  settings: AgentSettings | null;
 }) {
-  const runtimeText = runtime.connected ? "服务器已确认连接" : runtime.running ? "运行中，等待服务器确认" : "运行时未启动";
+  const recentCommands = [...runtime.recentCommands].reverse();
 
   return (
     <div className="settings-content">
-      <h2>连接</h2>
-      <p>服务器与运行时日志状态会根据本机绑定动态显示</p>
-      <div className="server-card">
-        <span>服务器地址</span>
-        <strong>{settings?.serverUrl || API_BASE}</strong>
+      <h2>{labels.commandLogs}</h2>
+      <div className="log-list command-log-list">
+        {recentCommands.length ? recentCommands.map((entry) => <CommandLogRow entry={entry} key={entry.itemId} />) : <span>{labels.noCommandActivity}</span>}
+        {runtime.lastError ? <span>[error] {runtime.lastError}</span> : null}
       </div>
-      <div className="server-card">
-        <span>中转连接</span>
-        <strong>{runtimeText}</strong>
-      </div>
-      <div className="log-list">
-        <span>{runtimeText}</span>
-        {runtime.lastError ? <span>最近错误：{runtime.lastError}</span> : null}
-        <span>{settings ? "设备已绑定到当前服务器" : "尚未保存设备绑定"}</span>
-      </div>
-      {message ? <p className="form-message">{message}</p> : null}
       {error ? <p className="form-message error">{error}</p> : null}
     </div>
   );
 }
 
-function AboutPanel() {
+function CommandLogRow({ entry }: { entry: AgentCommandLogEntry }) {
+  const exitSuffix = typeof entry.exitCode === "number" ? ` (exit ${entry.exitCode})` : "";
+  const outputSnippet = entry.output?.trim().replace(/\s+/g, " ").slice(0, 120);
+
+  return (
+    <span>
+      {`[${entry.status}] ${entry.command}${exitSuffix}${outputSnippet ? ` -> ${outputSnippet}` : ""}`}
+    </span>
+  );
+}
+
+function AboutPanel({ labels }: { labels: AgentMessages }) {
   return (
     <div className="settings-content">
-      <h2>关于</h2>
-      <p>Codex Agent 负责把本机项目安全桥接到移动端。</p>
+      <h2>{labels.about}</h2>
+      <p>{labels.aboutCopy}</p>
       <div className="about-mark">
         <AppLogo size="large" />
-        <strong>Codex Agent</strong>
-        <span>Desktop bridge prototype</span>
+        <strong>{labels.appName}</strong>
+        <span>{labels.aboutTagline}</span>
       </div>
+    </div>
+  );
+}
+
+function CustomSelect({
+  options,
+  value,
+  onChange
+}: {
+  options: ReadonlyArray<{ value: string; label: string }>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  return (
+    <div className={`custom-select ${open ? "open" : ""}`} ref={containerRef}>
+      <button
+        aria-expanded={open}
+        className="custom-select-trigger"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span>{selected?.label}</span>
+        <ChevronDown />
+      </button>
+      {open ? (
+        <div className="custom-select-menu" role="listbox">
+          {options.map((option) => (
+            <button
+              aria-selected={value === option.value}
+              className={value === option.value ? "active" : ""}
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              role="option"
+              type="button"
+            >
+              <span>{option.label}</span>
+              {value === option.value ? <Check /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,20 +1,29 @@
 import { Laptop } from "lucide-react";
-import { AgentDeviceOverview } from "../agentApi";
+import type { AgentMessages } from "../messages";
+import type { AgentDeviceOverview } from "../agentApi";
 
-export function DeviceCard({ device, active }: { device: AgentDeviceOverview; active: boolean }) {
+export function DeviceCard({
+  device,
+  active,
+  labels
+}: {
+  device: AgentDeviceOverview;
+  active: boolean;
+  labels: Pick<AgentMessages, "thisDevice" | "version" | "online" | "idle">;
+}) {
   return (
     <article className="device-card">
       <Laptop />
       <div>
         <strong>
           {device.name}
-          <span>本机</span>
+          <span>{labels.thisDevice}</span>
         </strong>
         <p>
-          {device.osLabel} · 版本 {device.version}
+          {device.osLabel} · {labels.version} {device.version}
         </p>
       </div>
-      <span className={`mini-state ${active ? "allowed" : "muted"}`}>{active ? "在线" : "待机"}</span>
+      <span className={`mini-state ${active ? "allowed" : "muted"}`}>{active ? labels.online : labels.idle}</span>
     </article>
   );
 }

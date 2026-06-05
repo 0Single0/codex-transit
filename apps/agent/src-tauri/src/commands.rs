@@ -106,6 +106,7 @@ pub struct AgentRuntimeState {
     running: bool,
     connected: bool,
     last_error: Option<String>,
+    recent_commands: Vec<AgentCommandLogEntry>,
     shutdown_tx: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<()>>,
 }
@@ -116,6 +117,17 @@ pub struct AgentRuntimeStatus {
     pub running: bool,
     pub connected: bool,
     pub last_error: Option<String>,
+    pub recent_commands: Vec<AgentCommandLogEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommandLogEntry {
+    pub item_id: String,
+    pub command: String,
+    pub status: String,
+    pub output: Option<String>,
+    pub exit_code: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -460,6 +472,28 @@ fn spawn_agent_runtime_task(
             &server_outbound_tx,
             &mut file_change_rx,
             shutdown_rx,
+            |event| {
+                if let crate::protocol::RealtimeEvent::CodexToolCall {
+                    item_id,
+                    command,
+                    status,
+                    output,
+                    exit_code,
+                    ..
+                } = event
+                {
+                    let _ = remember_agent_command_in_runtime(
+                        &runtime_state,
+                        AgentCommandLogEntry {
+                            item_id: item_id.clone(),
+                            command: command.clone(),
+                            status: status.clone(),
+                            output: output.clone(),
+                            exit_code: *exit_code,
+                        },
+                    );
+                }
+            },
         )
         .await;
         connection.abort();
@@ -496,6 +530,31 @@ fn mark_agent_runtime_connected_in_runtime(runtime_state: &Arc<Mutex<AgentRuntim
     Ok(())
 }
 
+fn remember_agent_command_in_runtime(
+    runtime_state: &Arc<Mutex<AgentRuntimeState>>,
+    entry: AgentCommandLogEntry,
+) -> Result<(), String> {
+    const MAX_RECENT_COMMANDS: usize = 20;
+
+    let mut runtime = runtime_state
+        .lock()
+        .map_err(|_| "agent runtime locked".to_string())?;
+    if let Some(existing_index) = runtime
+        .recent_commands
+        .iter()
+        .position(|current| current.item_id == entry.item_id)
+    {
+        runtime.recent_commands[existing_index] = entry;
+    } else {
+        runtime.recent_commands.push(entry);
+    }
+    if runtime.recent_commands.len() > MAX_RECENT_COMMANDS {
+        let overflow = runtime.recent_commands.len() - MAX_RECENT_COMMANDS;
+        runtime.recent_commands.drain(0..overflow);
+    }
+    Ok(())
+}
+
 fn mark_agent_runtime_disconnected_in_runtime(
     runtime_state: &Arc<Mutex<AgentRuntimeState>>,
     error: Option<String>,
@@ -519,6 +578,7 @@ pub fn get_agent_runtime_status_from_state(
         running: runtime.running,
         connected: runtime.connected,
         last_error: runtime.last_error.clone(),
+        recent_commands: runtime.recent_commands.clone(),
     })
 }
 

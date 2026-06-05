@@ -8,6 +8,7 @@ import type {
   SessionSummary
 } from "@codex-transit/shared";
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from "axios";
+import { maybeEncryptPayload } from "../transportCrypto";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
@@ -32,14 +33,33 @@ export class ApiClient {
   async login(email: string, password: string): Promise<LoginResponse> {
     return this.request("/auth/login", {
       method: "POST",
-      data: { email, password }
+      data: maybeEncryptPayload({ email, password })
     });
   }
 
   async register(email: string, password: string): Promise<LoginResponse> {
     return this.request("/auth/register", {
       method: "POST",
-      data: { email, password }
+      data: maybeEncryptPayload({ email, password })
+    });
+  }
+
+  async createAgentLoginPairing(requestBody: {
+    name: string;
+    platform: "windows" | "macos" | "unknown";
+  }): Promise<{
+    pairingToken: string;
+    expiresAt: string;
+    payload: {
+      type: "codex-transit.agent-login";
+      version: 1;
+      serverUrl: string;
+      pairingToken: string;
+    };
+  }> {
+    return this.request("/agent/login-pairings", {
+      method: "POST",
+      data: requestBody
     });
   }
 
@@ -54,7 +74,7 @@ export class ApiClient {
   async claimAgentLogin(pairingToken: string): Promise<{ deviceId: string }> {
     return this.request("/devices/agent-login/claim", {
       method: "POST",
-      data: { pairingToken }
+      data: maybeEncryptPayload({ pairingToken })
     });
   }
 

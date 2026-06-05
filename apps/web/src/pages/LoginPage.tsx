@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ApiClient } from "../api/client";
 import { LoginView } from "../components/LoginView";
 import { useAppState } from "../features/app/AppStateContext";
-import { readPostLoginRedirect, buildDevicesPath } from "../routes";
+import { buildDevicesPath, readPostLoginRedirect } from "../routes";
 
 export function LoginPage() {
   const { labels, setToken, setError } = useAppState();

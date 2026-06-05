@@ -20,7 +20,11 @@
     "verify": "pnpm typecheck && pnpm test"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
   }
 }

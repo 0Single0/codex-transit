@@ -1,12 +1,14 @@
 import { ArrowLeft, Maximize, Minus, Settings, X } from "lucide-react";
-import { AppLogo } from "./AppLogo";
+import type { AgentMessages } from "../messages";
 import { hideWindow, minimizeWindow, startWindowDrag, toggleMaximizeWindow } from "../windowActions";
+import { AppLogo } from "./AppLogo";
 
 type TitleBarProps = {
   title: string;
   closeOnly?: boolean;
   showBack?: boolean;
   settingsIcon?: boolean;
+  labels?: Pick<AgentMessages, "back" | "minimize" | "maximize" | "closeWindow">;
   onBack?: () => void;
   onClose?: () => void;
   onMaximize?: () => void;
@@ -18,6 +20,7 @@ export function TitleBar({
   closeOnly = false,
   showBack = false,
   settingsIcon = false,
+  labels,
   onBack,
   onClose,
   onMaximize,
@@ -31,7 +34,7 @@ export function TitleBar({
     <header className="window-titlebar">
       <div className="title-identity" onMouseDown={startWindowDrag}>
         {showBack ? (
-          <button className="back-button" aria-label="返回" onClick={onBack} onMouseDown={stopMouseDown} type="button">
+          <button className="back-button" aria-label={labels?.back ?? "Back"} onClick={onBack} onMouseDown={stopMouseDown} type="button">
             <ArrowLeft />
           </button>
         ) : settingsIcon ? (
@@ -45,15 +48,15 @@ export function TitleBar({
       <div className="window-controls">
         {!closeOnly ? (
           <>
-            <button aria-label="最小化" onClick={minimizeAction} onMouseDown={stopMouseDown} type="button">
+            <button aria-label={labels?.minimize ?? "Minimize"} onClick={minimizeAction} onMouseDown={stopMouseDown} type="button">
               <Minus />
             </button>
-            <button aria-label="最大化" onClick={maximizeAction} onMouseDown={stopMouseDown} type="button">
+            <button aria-label={labels?.maximize ?? "Maximize"} onClick={maximizeAction} onMouseDown={stopMouseDown} type="button">
               <Maximize />
             </button>
           </>
         ) : null}
-        <button aria-label="关闭" onClick={closeAction} onMouseDown={stopMouseDown} type="button">
+        <button aria-label={labels?.closeWindow ?? "Close"} onClick={closeAction} onMouseDown={stopMouseDown} type="button">
           <X />
         </button>
       </div>
