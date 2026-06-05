@@ -595,3 +595,14 @@
 
 涉及文件：
   - apps/agent/src-tauri/src/codex_adapter.rs：可见窗口模式下的 stdin 透传修复
+
+[2026-06-05]
+用户输入：为什么还是没有执行，排查一下原因，你能不能自己写个测试试一下
+完成：为带图消息执行链路补测试并绕开失效的可见窗口包装 (codex)
+  - 确认根因是图片附件消息必须走 stdin prompt，而 PowerShell 可见窗口包装仍可能吞掉这条输入链路
+  - 带图消息改为直接走已验证可工作的直连进程分支，不再使用可见窗口包装
+  - 在 codex_adapter.rs 新增 3 个单元测试，覆盖 stdin prompt 绑定与可见窗口禁用条件
+  - cargo check 通过；cargo test 受当前机器 Rust 编译环境内存/配额问题影响未跑完
+
+涉及文件：
+  - apps/agent/src-tauri/src/codex_adapter.rs：带图消息执行分支与单元测试

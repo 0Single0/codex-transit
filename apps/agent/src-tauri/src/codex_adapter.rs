@@ -110,13 +110,9 @@ impl CodexAdapter {
     ) -> Result<CodexSessionProcess> {
         let prompt = augment_prompt_with_file_attachments(prompt, &options.file_attachments);
         let prompt_via_stdin = requires_stdin_prompt(&options);
-        let mut exec = self.build_exec_command(working_dir.clone(), options);
-        if prompt_via_stdin {
-            exec.args.push("-".to_string());
-        } else {
-            exec.args.push(prompt.clone());
-        }
-        self.spawn_command(session_id, working_dir, exec, output_tx, if prompt_via_stdin { Some(prompt) } else { None })
+        let exec = self.build_exec_command(working_dir.clone(), options);
+        let (exec, prompt_stdin) = attach_prompt(exec, prompt, prompt_via_stdin);
+        self.spawn_command(session_id, working_dir, exec, output_tx, prompt_stdin)
             .await
     }
 
@@ -131,13 +127,9 @@ impl CodexAdapter {
     ) -> Result<CodexSessionProcess> {
         let prompt = augment_prompt_with_file_attachments(prompt, &options.file_attachments);
         let prompt_via_stdin = requires_stdin_prompt(&options);
-        let mut exec = self.build_resume_command(working_dir.clone(), &codex_session_id, options);
-        if prompt_via_stdin {
-            exec.args.push("-".to_string());
-        } else {
-            exec.args.push(prompt.clone());
-        }
-        self.spawn_command(session_id, working_dir, exec, output_tx, if prompt_via_stdin { Some(prompt) } else { None })
+        let exec = self.build_resume_command(working_dir.clone(), &codex_session_id, options);
+        let (exec, prompt_stdin) = attach_prompt(exec, prompt, prompt_via_stdin);
+        self.spawn_command(session_id, working_dir, exec, output_tx, prompt_stdin)
             .await
     }
 
@@ -149,7 +141,7 @@ impl CodexAdapter {
         output_tx: mpsc::Sender<ProcessOutput>,
         prompt_stdin: Option<String>,
     ) -> Result<CodexSessionProcess> {
-        if cfg!(windows) && env::var("CODEX_TRANSIT_OPEN_CODEX_WINDOW").unwrap_or_else(|_| "1".to_string()) != "0" {
+        if should_open_visible_window(prompt_stdin.is_some()) {
             return self
                 .spawn_windows_visible_codex(session_id, working_dir, exec, output_tx, prompt_stdin)
                 .await;
@@ -362,6 +354,26 @@ fn augment_prompt_with_file_attachments(
 
 fn requires_stdin_prompt(options: &CodexExecOptions) -> bool {
     !options.image_attachments.is_empty()
+}
+
+fn attach_prompt(
+    mut exec: CodexExecCommand,
+    prompt: String,
+    prompt_via_stdin: bool,
+) -> (CodexExecCommand, Option<String>) {
+    if prompt_via_stdin {
+        exec.args.push("-".to_string());
+        return (exec, Some(prompt));
+    }
+
+    exec.args.push(prompt);
+    (exec, None)
+}
+
+fn should_open_visible_window(prompt_via_stdin: bool) -> bool {
+    cfg!(windows)
+        && !prompt_via_stdin
+        && env::var("CODEX_TRANSIT_OPEN_CODEX_WINDOW").unwrap_or_else(|_| "1".to_string()) != "0"
 }
 
 pub fn default_codex_command() -> String {
@@ -686,5 +698,41 @@ impl CodexSessionProcess {
     pub async fn stop(&mut self) -> Result<()> {
         self.child.kill().await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attach_prompt_uses_stdin_when_requested() {
+        let exec = CodexExecCommand {
+            program: "codex".to_string(),
+            args: vec!["exec".to_string()],
+        };
+
+        let (exec, prompt_stdin) = attach_prompt(exec, "hello".to_string(), true);
+
+        assert_eq!(exec.args, vec!["exec".to_string(), "-".to_string()]);
+        assert_eq!(prompt_stdin.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn attach_prompt_keeps_cli_argument_without_stdin() {
+        let exec = CodexExecCommand {
+            program: "codex".to_string(),
+            args: vec!["exec".to_string()],
+        };
+
+        let (exec, prompt_stdin) = attach_prompt(exec, "hello".to_string(), false);
+
+        assert_eq!(exec.args, vec!["exec".to_string(), "hello".to_string()]);
+        assert!(prompt_stdin.is_none());
+    }
+
+    #[test]
+    fn visible_window_is_disabled_for_stdin_prompt() {
+        assert!(!should_open_visible_window(true));
     }
 }
