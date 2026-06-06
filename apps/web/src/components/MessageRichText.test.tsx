@@ -31,4 +31,47 @@ describe("MessageRichText", () => {
     expect(html).not.toContain("apps/web/src/components/");
     expect(html).not.toContain("E:/code/codex-transit/");
   });
+
+  it("renders markdown tables and fenced code blocks", () => {
+    const html = renderToStaticMarkup(
+      <MessageRichText
+        text={[
+          "| name | value |",
+          "| --- | --- |",
+          "| alpha | beta |",
+          "",
+          "```ts",
+          "const total = 1 + 2;",
+          "```"
+        ].join("\n")}
+        tone="codex"
+      />
+    );
+
+    expect(html).toContain("<table");
+    expect(html).toContain("<thead");
+    expect(html).toContain("alpha");
+    expect(html).toContain("<pre");
+    expect(html).toContain("language-ts");
+    expect(html).toContain("const total = 1 + 2;");
+  });
+
+  it("renders inline and block katex formulas", () => {
+    const html = renderToStaticMarkup(
+      <MessageRichText
+        text={[
+          "行内公式 $E=mc^2$",
+          "",
+          "$$",
+          "\\int_0^1 x^2 dx",
+          "$$"
+        ].join("\n")}
+        tone="codex"
+      />
+    );
+
+    expect(html).toContain("katex");
+    expect(html).toContain("katex-display");
+    expect(html).toContain("mathml");
+  });
 });

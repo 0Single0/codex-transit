@@ -14,11 +14,11 @@ export function HistoryListView(props: {
     <section className="grid h-full min-h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[radial-gradient(circle_at_top,_#ffffff_0%,_#f7fafe_38%,_#edf3f8_100%)] text-slate-900">
         <PageHeader onBack={props.onBack} title={props.labels.history} variant="chat" />
       <LoadingSurface
-        className="min-h-0"
+        className="h-full min-h-0 overflow-hidden"
         isLoading={props.loading}
         overlayClassName="absolute inset-0 z-10 flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.72)_0%,_rgba(247,250,254,0.78)_38%,_rgba(237,243,248,0.82)_100%)]"
       >
-        <div className="codex-scrollbar min-h-0 overflow-y-auto px-5 pb-8">
+        <div className="codex-scrollbar h-full min-h-0 overflow-y-auto px-5 pb-8">
           <div className="space-y-3">
             {!props.loading && !props.history.length ? (
               <div className="rounded-[22px] bg-white/92 px-4 py-5 text-center text-sm leading-6 text-slate-500 shadow-[0_12px_30px_rgba(148,163,184,0.1)] ring-1 ring-white/80">

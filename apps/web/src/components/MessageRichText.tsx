@@ -1,4 +1,9 @@
 import { FileCode2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 
 type FileReference = {
   label: string;
@@ -18,7 +23,7 @@ export function MessageRichText(props: {
   const blocks = parseMessageBlocks(props.text);
 
   return (
-    <div className="space-y-2.5">
+    <div className="message-markdown space-y-1.5">
       {blocks.map((block, index) => {
         if (block.kind === "file") {
           return (
@@ -39,9 +44,74 @@ export function MessageRichText(props: {
         }
 
         return (
-          <p className={`whitespace-pre-wrap break-words text-[15px] leading-7 ${toneClass(props.tone)}`} key={`text-${index}`}>
-            {block.content}
-          </p>
+            <div className={`text-[15px] leading-6 ${toneClass(props.tone)}`} key={`text-${index}`}>
+              <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="break-words whitespace-pre-wrap leading-7">{children}</p>,
+                h1: ({ children }) => <h1 className="text-[1.1rem] font-semibold leading-7 text-slate-900">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-[1.02rem] font-semibold leading-7 text-slate-900">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-base font-semibold leading-6 text-slate-900">{children}</h3>,
+                ul: ({ children }) => <ul className="list-disc pl-5 leading-3 marker:text-slate-500">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal pl-5 leading-3 marker:text-slate-500">{children}</ol>,
+                li: ({ children }) => <li className="break-words py-0.5 leading-6">{children}</li>,
+                blockquote: ({ children }) => (
+                  <blockquote className="rounded-r-2xl border-l-4 border-sky-200 bg-sky-50/70 px-4 py-2.5 leading-6 text-slate-700">
+                    {children}
+                  </blockquote>
+                ),
+                a: ({ href, children }) => (
+                  <a
+                    className="break-all font-medium text-sky-700 underline decoration-sky-300 underline-offset-2"
+                    href={href}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {children}
+                  </a>
+                ),
+                table: ({ children }) => (
+                  <div className="my-3 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 shadow-[0_10px_24px_rgba(148,163,184,0.08)]">
+                    <table className="min-w-full border-collapse text-left text-[14px] leading-6">{children}</table>
+                  </div>
+                ),
+                thead: ({ children }) => <thead className="bg-slate-50 text-slate-900">{children}</thead>,
+                tbody: ({ children }) => <tbody className="divide-y divide-slate-200/80">{children}</tbody>,
+                tr: ({ children }) => <tr className="align-top">{children}</tr>,
+                th: ({ children }) => <th className="px-3 py-2 font-semibold">{children}</th>,
+                td: ({ children }) => <td className="px-3 py-2 text-slate-700">{children}</td>,
+                pre: ({ children }) => (
+                  <pre className="my-3 overflow-x-auto rounded-2xl bg-slate-950 px-4 py-3 text-[13px] leading-6 text-slate-100 shadow-[0_16px_36px_rgba(15,23,42,0.22)]">
+                    {children}
+                  </pre>
+                ),
+                code: ({ className, children }) => {
+                  const isBlockCode = typeof className === "string" && className.includes("language-");
+                  if (isBlockCode) {
+                    return <code className={`${className} block min-w-max font-mono`}>{children}</code>;
+                  }
+
+                  return (
+                    <code className="rounded-md bg-slate-200/75 px-1.5 py-0.5 font-mono text-[0.92em] text-slate-900">
+                      {children}
+                    </code>
+                  );
+                },
+                hr: () => <hr className="my-3 border-slate-200" />,
+                img: ({ src, alt }) => (
+                  <img
+                    alt={alt ?? ""}
+                    className="my-2.5 rounded-2xl border border-slate-200/80 shadow-[0_12px_28px_rgba(148,163,184,0.12)]"
+                    loading="lazy"
+                    src={src}
+                  />
+                )
+              }}
+              rehypePlugins={[rehypeKatex]}
+              remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
+            >
+              {block.content}
+            </ReactMarkdown>
+          </div>
         );
       })}
     </div>
@@ -51,7 +121,7 @@ export function MessageRichText(props: {
 function parseMessageBlocks(text: string): MessageBlock[] {
   const lines = text.split("\n");
   const blocks: MessageBlock[] = [];
-  const filePattern = /^(?:修改文件:)?\s*\[([^\]]+)\]\(([^)]+)\)\s*$/;
+  const filePattern = /^(?:修改文件:|淇敼鏂囦欢:)?\s*\[([^\]]+)\]\(([^)]+)\)\s*$/;
   let currentText: string[] = [];
 
   function flushText() {

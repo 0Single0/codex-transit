@@ -14,3 +14,14 @@ body {
   background: #f0f4f7;
   color: #0f172a;
 }
+
+.message-markdown .katex-display {
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
+}
+
+.message-markdown .katex {
+  max-width: 100%;
+}
